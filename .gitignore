@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+
+# builds
+.next
+out
+build
+dist
+*.tsbuildinfo
+
+# Expo
+.expo
+.expo-shared
+web-build
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+
+# misc
+.DS_Store

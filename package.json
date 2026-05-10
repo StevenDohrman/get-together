@@ -1,0 +1,27 @@
+{
+  "name": "get-together",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.6",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n web,mobile,api -c blue,magenta,green \"pnpm dev:web\" \"pnpm dev:mobile\" \"pnpm dev:api\"",
+    "dev:web": "pnpm -C apps/web dev",
+    "dev:mobile": "pnpm -C apps/mobile start",
+    "dev:api": "pnpm -C apps/api dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier . --write",
+    "clean:workspace-node-modules": "rimraf apps/*/node_modules packages/*/node_modules"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "concurrently": "^9.2.0",
+    "eslint": "^9.36.0",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
+    "typescript-eslint": "^8.44.0"
+  }
+}

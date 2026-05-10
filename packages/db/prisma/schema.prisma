@@ -1,0 +1,15 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Connection is configured via prisma.config.ts
+}
+
+model Event {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String
+  startsAt  DateTime
+  createdAt DateTime @default(now())
+}

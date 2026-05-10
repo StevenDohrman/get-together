@@ -1,0 +1,31 @@
+{
+  "name": "@get-together/db",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prisma": "prisma --config prisma.config.ts",
+    "generate": "pnpm prisma generate",
+    "migrate:dev": "pnpm prisma migrate dev",
+    "studio": "pnpm prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.8.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1",
+    "prisma": "^7.8.0",
+    "typescript": "^5.9.2"
+  }
+}
