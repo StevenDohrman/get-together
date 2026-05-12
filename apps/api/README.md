@@ -1,4 +1,4 @@
-# @get-together/api
+# @uconnect/api
 
 Fastify API.
 

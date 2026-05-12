@@ -1,4 +1,4 @@
-# GetTogether
+# UConnect
 
 Mobile-first monorepo using pnpm workspaces.
 
@@ -21,6 +21,16 @@ Mobile-first monorepo using pnpm workspaces.
 pnpm install
 cp .env.example .env
 pnpm dev
+```
+
+## Database
+
+Prisma lives in `packages/db` and targets Postgres (Supabase-friendly).
+
+```bash
+pnpm -C packages/db generate
+pnpm -C packages/db migrate:dev -- --name init
+pnpm -C packages/db seed
 ```
 
 Start individually:
