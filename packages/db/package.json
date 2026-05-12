@@ -1,5 +1,5 @@
 {
-  "name": "@get-together/db",
+  "name": "@uconnect/db",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,6 +11,9 @@
       "default": "./dist/index.js"
     }
   },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
@@ -18,6 +21,7 @@
     "prisma": "prisma --config prisma.config.ts",
     "generate": "pnpm prisma generate",
     "migrate:dev": "pnpm prisma migrate dev",
+    "seed": "pnpm prisma db seed",
     "studio": "pnpm prisma studio"
   },
   "dependencies": {

@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "GetTogether",
-    "slug": "get-together",
+    "name": "UConnect",
+    "slug": "uconnect",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "gettogether",
+    "scheme": "uconnect",
     "plugins": ["expo-router"],
     "splash": {
       "image": "./assets/splash-icon.png",
