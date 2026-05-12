@@ -1,0 +1,135 @@
+#!/usr/bin/env node
+
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const repoRoot = process.cwd();
+
+function run(command, args, { inherit = true } = {}) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    stdio: inherit ? 'inherit' : 'pipe',
+    encoding: 'utf8',
+  });
+  return result;
+}
+
+function runCapture(command, args) {
+  const result = run(command, args, { inherit: false });
+  if (result.error) throw result.error;
+  return { code: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+}
+
+function extractJson(text) {
+  const idx = text.indexOf('{');
+  if (idx === -1) return null;
+  return text.slice(idx);
+}
+
+function ensureSchemaParam(dbUrl) {
+  if (!dbUrl) return dbUrl;
+  if (dbUrl.includes('?')) {
+    return dbUrl.includes('schema=') ? dbUrl : `${dbUrl}&schema=public`;
+  }
+  return `${dbUrl}?schema=public`;
+}
+
+function upsertEnvVar(content, key, value) {
+  const line = `${key}="${value}"`;
+  const pattern = new RegExp(`^${key}=".*"$`, 'm');
+  if (pattern.test(content)) return content.replace(pattern, line);
+  return `${content.replace(/\s*$/, '')}\n${line}\n`;
+}
+
+function main() {
+  // 1) Ensure supabase CLI exists.
+  const version = runCapture('supabase', ['--version']);
+  if (version.code !== 0) {
+    // eslint-disable-next-line no-console
+    console.error('Supabase CLI not found. Install it first (macOS):\n  brew install supabase/tap/supabase');
+    process.exit(1);
+  }
+
+  // 2) Start local Supabase (idempotent).
+  const start = run('supabase', ['start']);
+  if (start.status !== 0) process.exit(start.status ?? 1);
+
+  // 3) Read status and map to our .env keys.
+  const status = runCapture('supabase', ['status', '-o', 'json']);
+  if (status.code !== 0) {
+    // eslint-disable-next-line no-console
+    console.error(status.stderr || status.stdout);
+    process.exit(status.code);
+  }
+
+  const jsonText = extractJson(status.stdout);
+  if (!jsonText) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to parse `supabase status` output.');
+    process.exit(1);
+  }
+
+  /** @type {Record<string, string>} */
+  let vars;
+  try {
+    vars = JSON.parse(jsonText);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to parse JSON from `supabase status`.');
+    // eslint-disable-next-line no-console
+    console.error(err);
+    process.exit(1);
+  }
+
+  const supabaseUrl = vars.API_URL;
+  const anonKey = vars.ANON_KEY;
+  const serviceRoleKey = vars.SERVICE_ROLE_KEY;
+  const dbUrl = ensureSchemaParam(vars.DB_URL);
+
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !dbUrl) {
+    // eslint-disable-next-line no-console
+    console.error('Missing required values from `supabase status` (API_URL, ANON_KEY, SERVICE_ROLE_KEY, DB_URL).');
+    process.exit(1);
+  }
+
+  const envPath = path.join(repoRoot, '.env');
+  let envContent = '';
+  if (fs.existsSync(envPath)) {
+    envContent = fs.readFileSync(envPath, 'utf8');
+  } else {
+    envContent = '# Local (Supabase CLI)\n';
+  }
+
+  envContent = upsertEnvVar(envContent, 'SUPABASE_URL', supabaseUrl);
+  envContent = upsertEnvVar(envContent, 'SUPABASE_ANON_KEY', anonKey);
+  envContent = upsertEnvVar(envContent, 'SUPABASE_SERVICE_ROLE_KEY', serviceRoleKey);
+  envContent = upsertEnvVar(envContent, 'DATABASE_URL', dbUrl);
+
+  if (!/^API_PORT=/.test(envContent)) {
+    envContent = upsertEnvVar(envContent, 'API_PORT', '4000');
+  }
+
+  fs.writeFileSync(envPath, envContent, 'utf8');
+
+  // 4) Prisma generate + migrate + seed.
+  const generate = run('pnpm', ['-C', 'packages/db', 'generate']);
+  if (generate.status !== 0) process.exit(generate.status ?? 1);
+
+  const migrate = run('pnpm', ['-C', 'packages/db', 'migrate:dev']);
+  if (migrate.status !== 0) process.exit(migrate.status ?? 1);
+
+  const seed = run('pnpm', ['-C', 'packages/db', 'seed']);
+  if (seed.status !== 0) process.exit(seed.status ?? 1);
+
+  // eslint-disable-next-line no-console
+  console.log('\nLocal setup complete. Next:');
+  // eslint-disable-next-line no-console
+  console.log('  pnpm dev:api');
+  // eslint-disable-next-line no-console
+  console.log('  pnpm dev:web');
+  // eslint-disable-next-line no-console
+  console.log('  pnpm dev:mobile');
+}
+
+main();

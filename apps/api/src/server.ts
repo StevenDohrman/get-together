@@ -3,12 +3,18 @@ import cors from '@fastify/cors';
 import { createClient } from '@supabase/supabase-js';
 import { getBearerToken } from './auth.js';
 import { getEnv } from './env.js';
+import { registerAuthRoutes } from './routes/auth.js';
 
 export function buildServer() {
   const env = getEnv();
 
   const app = Fastify({
-    logger: true,
+    logger: {
+      redact: {
+        paths: ['req.headers.authorization'],
+        remove: true,
+      },
+    },
   });
 
   app.register(cors, {
@@ -16,12 +22,21 @@ export function buildServer() {
     credentials: true,
   });
 
+  const supabasePublic =
+    env.SUPABASE_URL && env.SUPABASE_ANON_KEY
+      ? createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : null;
+
   const supabaseAdmin =
     env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
           auth: { persistSession: false, autoRefreshToken: false },
         })
       : null;
+
+  registerAuthRoutes(app, { supabasePublic, supabaseAdmin });
 
   app.get('/health', async () => {
     return { ok: true };

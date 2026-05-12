@@ -15,21 +15,80 @@ Mobile-first monorepo using pnpm workspaces.
 - Node.js >= 20
 - pnpm via Corepack (`corepack enable`)
 
-## Run locally
+For the recommended local setup, you also need:
+
+- Docker (Supabase Local runs in containers)
+- Supabase CLI (`supabase`)
+
+## Local setup (recommended)
+
+This repo is designed to run **locally with Supabase Local** (Postgres + Auth) for closest parity with “live”.
+
+### One command bootstrap
+
+```bash
+pnpm install
+pnpm setup:local
+pnpm dev
+```
+
+`pnpm setup:local` will:
+
+- start Supabase Local (`supabase start`)
+- write a root `.env` using the local URLs/keys from `supabase status`
+- run Prisma `generate`, `migrate dev`, and `seed`
+
+### Manual local setup
+
+If you prefer to do it step-by-step:
 
 ```bash
 pnpm install
 cp .env.example .env
-pnpm dev
+supabase start
+pnpm -C packages/db generate
+pnpm -C packages/db prisma migrate deploy
+pnpm -C packages/db seed
+pnpm dev:api
 ```
+
+Ports are configured in `supabase/config.toml`.
+
+## Live (hosted Supabase)
+
+“Live” will use a hosted Supabase project (Postgres + Auth) with the same API routes.
+
+1) Create a Supabase project
+
+- Create a project in Supabase.
+- Copy the project URL + keys into a root `.env` (start from `.env.example`).
+
+2) Point Prisma at the hosted database
+
+- Set `DATABASE_URL` to your Supabase Postgres connection string.
+
+3) Apply schema changes
+
+```bash
+pnpm -C packages/db prisma generate
+pnpm -C packages/db prisma migrate deploy
+```
+
+Notes:
+
+- Never commit `.env` (it contains secrets).
+- For production workflows, prefer `prisma migrate deploy` over `migrate dev`.
 
 ## Database
 
-Prisma lives in `packages/db` and targets Postgres (Supabase-friendly).
+Prisma lives in `packages/db` and targets Postgres.
+
+If you can’t install the Supabase CLI yet, you can run a standalone local Postgres (no Auth) using Docker Compose:
 
 ```bash
+docker compose up -d
 pnpm -C packages/db generate
-pnpm -C packages/db migrate:dev -- --name init
+pnpm -C packages/db prisma migrate deploy
 pnpm -C packages/db seed
 ```
 
