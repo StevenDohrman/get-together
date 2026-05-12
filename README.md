@@ -36,6 +36,7 @@ pnpm dev
 
 - start Supabase Local (`supabase start`)
 - write a root `.env` using the local URLs/keys from `supabase status`
+- write `apps/web/.env.local` with `NEXT_PUBLIC_SUPABASE_*` for the web app
 - run Prisma `generate`, `migrate dev`, and `seed`
 
 ### Manual local setup
@@ -53,6 +54,11 @@ pnpm dev:api
 ```
 
 Ports are configured in `supabase/config.toml`.
+
+Env note:
+
+- API + Prisma load root `.env`, and if present, root `.env.local` overrides it.
+- The web app reads `apps/web/.env.local` (Next.js public env).
 
 ## Live (hosted Supabase)
 

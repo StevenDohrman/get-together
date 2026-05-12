@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+UConnect web app (Next.js).
 
 ## Getting Started
 
-First, run the development server:
+From the repo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm dev:web
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Or from this folder:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Env
 
-## Learn More
+The auth UI uses Supabase Auth directly. Create `apps/web/.env.local`:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env.local
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Key vars:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `NEXT_PUBLIC_SUPABASE_URL` (local default: `http://127.0.0.1:54321`)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from `supabase status`)
 
-## Deploy on Vercel
+After changing env vars, restart the dev server.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Auth UI
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `http://localhost:3000/auth` (login/signup)
+- `http://localhost:3000/profile` (view/update username)
+
+For Supabase Local, magic link emails show up in Inbucket (see `supabase status` for the URL).
+
+### Troubleshooting: “NetworkError when attempting to fetch resource”
+
+This usually means the browser can’t reach Supabase.
+
+- Make sure Supabase Local is running: `supabase start` (or `pnpm setup:local` from repo root)
+- Confirm `NEXT_PUBLIC_SUPABASE_URL` points at the right host/port
+
+## Notes
+
+- Username is stored in Supabase `user_metadata.username`.
