@@ -66,16 +66,31 @@ async function main() {
     create: { groupId: group.id, interestId: interests[2].id, weight: 6 },
   });
 
-  const event = await prisma.event.create({
-    data: {
-      title: 'Coffee meetup',
-      description: 'Seed event',
-      startsAt: addDays(new Date(), 1),
-      locationName: 'Cafe',
+  const eventData = {
+    title: 'Coffee meetup',
+    description: 'Seed event',
+    startsAt: addDays(new Date(), 1),
+    locationName: 'Cafe',
+    createdById: user.id,
+    groupId: group.id,
+  };
+
+  const existingEvent = await prisma.event.findFirst({
+    where: {
+      title: eventData.title,
       createdById: user.id,
       groupId: group.id,
     },
   });
+
+  const event = existingEvent
+    ? await prisma.event.update({
+        where: { id: existingEvent.id },
+        data: eventData,
+      })
+    : await prisma.event.create({
+        data: eventData,
+      });
 
   await prisma.groupMember.upsert({
     where: { groupId_userId: { groupId: group.id, userId: user.id } },
