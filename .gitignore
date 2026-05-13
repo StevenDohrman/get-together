@@ -15,8 +15,14 @@ web-build
 
 # env
 .env
+.env.local
 .env.*
 !.env.example
+
+# Supabase Local (generated)
+supabase/.temp
+supabase/.branches
+.supabase
 
 # logs
 *.log

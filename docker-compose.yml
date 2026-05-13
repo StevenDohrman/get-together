@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: uconnect-db-standalone
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: uconnect
+      POSTGRES_USER: uconnect
+      POSTGRES_PASSWORD: uconnect
+    volumes:
+      - uconnect_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  uconnect_postgres_data:

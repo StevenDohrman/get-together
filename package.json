@@ -11,6 +11,7 @@
     "dev:web": "pnpm -C apps/web dev",
     "dev:mobile": "pnpm -C apps/mobile start",
     "dev:api": "pnpm -C apps/api dev",
+    "setup:local": "node scripts/setup-local.mjs",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier . --write",

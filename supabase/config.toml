@@ -1,0 +1,20 @@
+# Supabase local development configuration.
+#
+# We override the DB port to avoid conflicts when you have other `supabase start`
+# projects running (the default DB port is 54322).
+
+project_id = "uconnect"
+
+[api]
+# Supabase API gateway
+port = 54321
+
+[db]
+# Postgres
+port = 54332
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324

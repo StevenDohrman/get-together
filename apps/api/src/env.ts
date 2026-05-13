@@ -3,6 +3,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   API_PORT: z.coerce.number().default(4000),
   SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 });
 
