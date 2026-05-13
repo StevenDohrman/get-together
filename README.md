@@ -93,6 +93,41 @@ The starter interest catalog is seeded from `packages/db/prisma/seed.js`. Add ne
 
 The API exposes them at `GET /interests` so web/mobile can populate a future picker from the database.
 
+### Generating Embeddings
+
+Interests are embedded using the `all-mpnet-base-v2` model running in Docker via [Text Embeddings Inference (TEI)](https://github.com/huggingface/text-embeddings-inference).
+
+**Step 1: Start the embedding service**
+
+CPU:
+
+```bash
+docker run -p 8080:80 -v hf_cache:/data --pull always ghcr.io/huggingface/text-embeddings-inference:cpu-latest --model-id sentence-transformers/all-mpnet-base-v2 --pooling mean --dtype float16
+```
+
+NVIDIA GPU:
+
+```bash
+docker run --gpus all -p 8080:80 -v hf_cache:/data --pull always ghcr.io/huggingface/text-embeddings-inference:cuda-latest --model-id sentence-transformers/all-mpnet-base-v2 --pooling mean --dtype float16
+```
+
+**Step 2: Run the embedding script** (from repo root)
+
+```bash
+node scripts/compute-embeddings.mjs
+```
+
+The script will:
+
+- Health-check the embedding service
+- Fetch all interests from the database
+- Generate embeddings for each interest
+- Store them in `InterestEmbedding` using pgvector for similarity search
+
+Embeddings are 768-dimensional vectors stored with an IVFFlat index for efficient cosine similarity queries.
+
+### Postgres without Supabase
+
 If you can’t install the Supabase CLI yet, you can run a standalone local Postgres (no Auth) using Docker Compose:
 
 ```bash
