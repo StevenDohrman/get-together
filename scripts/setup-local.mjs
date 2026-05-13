@@ -130,11 +130,11 @@ function main() {
     fs.writeFileSync(envPath, upsertEnvVar(after, 'API_PORT', '4000'), 'utf8');
   }
 
-  // 4) Prisma generate + migrate + seed.
+  // 4) Prisma generate + deploy migrations + seed.
   const generate = run('pnpm', ['-C', 'packages/db', 'generate']);
   if (generate.status !== 0) process.exit(generate.status ?? 1);
 
-  const migrate = run('pnpm', ['-C', 'packages/db', 'migrate:dev']);
+  const migrate = run('pnpm', ['-C', 'packages/db', 'migrate:deploy']);
   if (migrate.status !== 0) process.exit(migrate.status ?? 1);
 
   const seed = run('pnpm', ['-C', 'packages/db', 'seed']);
