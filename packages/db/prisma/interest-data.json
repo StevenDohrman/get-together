@@ -1,0 +1,62 @@
+[
+  {
+    "slug": "beverages",
+    "name": "Beverages",
+    "isRoot": true,
+    "metadata": { "description": "Drinks and related culture" },
+    "parents": []
+  },
+  {
+    "slug": "coffee",
+    "name": "Coffee",
+    "metadata": {
+      "description": "Everything about coffee, brewing, and cafes"
+    },
+    "parents": ["beverages"]
+  },
+  {
+    "slug": "tea",
+    "name": "Tea",
+    "metadata": { "description": "Tea types, ceremonies, and brewing" },
+    "parents": ["beverages"]
+  },
+  {
+    "slug": "outdoors",
+    "name": "Outdoors",
+    "isRoot": true,
+    "metadata": { "description": "Activities and interests in the outdoors" },
+    "parents": []
+  },
+  {
+    "slug": "hiking",
+    "name": "Hiking",
+    "metadata": { "description": "Hiking and trail exploration" },
+    "parents": ["outdoors"]
+  },
+  {
+    "slug": "fitness",
+    "name": "Fitness",
+    "isRoot": true,
+    "metadata": { "description": "Fitness, workouts, and training" },
+    "parents": []
+  },
+  {
+    "slug": "trail-running",
+    "name": "Trail Running",
+    "metadata": { "description": "Running on trails and technical terrain" },
+    "parents": ["outdoors", "fitness"]
+  },
+  {
+    "slug": "games",
+    "name": "Games",
+    "isRoot": true,
+    "metadata": { "description": "All kinds of games" },
+    "parents": []
+  },
+  {
+    "slug": "board-games",
+    "name": "Board Games",
+    "metadata": { "description": "Tabletop and board gaming" },
+    "parents": ["games"]
+  }
+]
