@@ -23,8 +23,8 @@ model Interest {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
   name      String
-  metadata  Json?    
-  isRoot    Boolean  @default(false)
+  metadata  Json?
+  isRoot    Boolean  @default(false) @map("is_root")
   createdAt DateTime @default(now())
 
   // Relations to represent a Directed Acyclic Graph (DAG)
@@ -40,14 +40,14 @@ model Interest {
 // Join table for self-referential many-to-many to model DAG edges
 model InterestRelation {
   parent   Interest @relation("parent_relations", fields: [parentId], references: [id], onDelete: Cascade)
-  parentId String   @db.Uuid
+  parentId String   @db.Uuid @map("parent_id")
   child    Interest @relation("child_relations", fields: [childId], references: [id], onDelete: Cascade)
-  childId  String   @db.Uuid
+  childId  String   @db.Uuid @map("child_id")
 
   // Optional weight or ordering for the relation
   weight Int? @db.SmallInt
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@id([parentId, childId])
   @@index([childId])
@@ -56,12 +56,12 @@ model InterestRelation {
 model InterestEmbedding {
   id         String   @id @default(uuid()) @db.Uuid
   interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
-  interestId String   @db.Uuid @unique
+  interestId String   @db.Uuid @unique @map("interest_id")
 
   // Embedding vector stored as JSON array of numbers. Consider switching to pgvector later.
   vector Json
   model  String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([interestId])
 }
