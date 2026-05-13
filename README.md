@@ -64,16 +64,16 @@ Env note:
 
 “Live” will use a hosted Supabase project (Postgres + Auth) with the same API routes.
 
-1) Create a Supabase project
+1. Create a Supabase project
 
 - Create a project in Supabase.
 - Copy the project URL + keys into a root `.env` (start from `.env.example`).
 
-2) Point Prisma at the hosted database
+2. Point Prisma at the hosted database
 
 - Set `DATABASE_URL` to your Supabase Postgres connection string.
 
-3) Apply schema changes
+3. Apply schema changes
 
 ```bash
 pnpm -C packages/db prisma generate
@@ -88,6 +88,10 @@ Notes:
 ## Database
 
 Prisma lives in `packages/db` and targets Postgres.
+
+The starter interest catalog is seeded from `packages/db/prisma/seed.js`. Add new default interests there, then rerun `pnpm -C packages/db seed`.
+
+The API exposes them at `GET /interests` so web/mobile can populate a future picker from the database.
 
 If you can’t install the Supabase CLI yet, you can run a standalone local Postgres (no Auth) using Docker Compose:
 
