@@ -133,6 +133,7 @@ export default function ProfilePage() {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const initialLoadDone = useRef<boolean>(false);
   const lastSavedState = useRef<string>('');
+  const lastFailedState = useRef<string>('');
 
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const deferredSearchTerm = useDeferredValue(searchTerm);
@@ -331,6 +332,7 @@ export default function ProfilePage() {
       selectedInterests.map((i) => ({ id: i.id, weight: i.weight })),
     );
     if (currentState === lastSavedState.current) return;
+    if (currentState === lastFailedState.current) return;
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -362,11 +364,11 @@ export default function ProfilePage() {
             lastSavedState.current = newBackendState;
             setSelectedInterests(sorted);
           }
+          lastFailedState.current = '';
           setInterestSaving(false);
         })
         .catch((e) => {
-          // Revert optimistic lastSavedState so we try again next time changes happen
-          lastSavedState.current = '';
+          lastFailedState.current = currentState;
           setInterestError(
             e instanceof Error ? e.message : 'Failed to save interests',
           );

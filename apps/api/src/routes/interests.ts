@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { getBearerToken } from '../auth.js';
+import { escapeLikePattern, sanitizeUserInput } from '../sanitization.js';
 
 export type InterestsRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
@@ -148,10 +149,7 @@ export function registerInterestsRoutes(
       });
     }
 
-    const q =
-      typeof (req.query as any)?.q === 'string'
-        ? String((req.query as any).q).trim()
-        : '';
+    const q = escapeLikePattern(sanitizeUserInput((req.query as any)?.q));
 
     let query = supabaseAdmin
       .from('Interest')
