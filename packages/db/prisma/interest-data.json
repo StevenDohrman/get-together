@@ -1,0 +1,1213 @@
+[
+  {
+    "slug": "athletic-physical-hobbies",
+    "name": "Athletic & Physical Hobbies",
+    "isRoot": true,
+    "metadata": {
+      "description": "Sports, fitness activities, and physical recreation"
+    },
+    "parents": []
+  },
+  {
+    "slug": "running",
+    "name": "Running",
+    "metadata": {
+      "description": "Jogging and distance running for fitness and recreation"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "walking",
+    "name": "Walking",
+    "metadata": { "description": "Casual walking for exercise and relaxation" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "yoga",
+    "name": "Yoga",
+    "metadata": {
+      "description": "Mind-body practice combining poses, breathing, and meditation"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "pilates",
+    "name": "Pilates",
+    "metadata": {
+      "description": "Core-strengthening exercise method focusing on controlled movements"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "tai-chi",
+    "name": "Tai Chi",
+    "metadata": {
+      "description": "Traditional Chinese martial art focused on slow, flowing movements"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "pickleball",
+    "name": "Pickleball",
+    "metadata": {
+      "description": "Paddle sport played on a smaller court than tennis"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "spinning",
+    "name": "Spinning",
+    "metadata": {
+      "description": "High-intensity stationary bike workout class"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "dance",
+    "name": "Dance",
+    "metadata": {
+      "description": "Movement to music as exercise or creative expression"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "badminton",
+    "name": "Badminton",
+    "metadata": { "description": "Racket sport played with a shuttlecock" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "volleyball",
+    "name": "Volleyball",
+    "metadata": {
+      "description": "Team sport with a net, played indoors or outdoors"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "soccer",
+    "name": "Soccer",
+    "metadata": { "description": "Team sport played with a ball and feet" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "basketball",
+    "name": "Basketball",
+    "metadata": {
+      "description": "Team sport involving shooting a ball through elevated hoops"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "swimming",
+    "name": "Swimming",
+    "metadata": { "description": "Water-based aerobic exercise and sport" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "tennis",
+    "name": "Tennis",
+    "metadata": { "description": "Racket sport played on a court with a net" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "golf",
+    "name": "Golf",
+    "metadata": {
+      "description": "Outdoor sport of hitting a ball into holes on a course"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "ice-skating",
+    "name": "Ice Skating",
+    "metadata": { "description": "Gliding on ice with specialized skates" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "roller-skating",
+    "name": "Roller Skating",
+    "metadata": {
+      "description": "Gliding on wheels with quad or inline skates"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "barre",
+    "name": "Barre",
+    "metadata": {
+      "description": "Ballet-inspired fitness class using a barre for support"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "bowling",
+    "name": "Bowling",
+    "metadata": {
+      "description": "Indoor sport of rolling a ball to knock down pins"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "skateboarding",
+    "name": "Skateboarding",
+    "metadata": {
+      "description": "Riding and performing tricks on a skateboard"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "weight-lifting",
+    "name": "Weight Lifting",
+    "metadata": {
+      "description": "Strength training with weights and resistance"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "kickboxing",
+    "name": "Kickboxing",
+    "metadata": { "description": "Combat sport combining kicks and punches" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "table-tennis",
+    "name": "Table Tennis",
+    "metadata": { "description": "Fast-paced paddle sport played on a table" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "kickball",
+    "name": "Kickball",
+    "metadata": {
+      "description": "Team sport similar to baseball but played with a rubber ball"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "baseball",
+    "name": "Baseball",
+    "metadata": { "description": "Team bat-and-ball sport" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "archery",
+    "name": "Archery",
+    "metadata": { "description": "Shooting arrows at targets using a bow" },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "acro-yoga",
+    "name": "Acro Yoga",
+    "metadata": {
+      "description": "Partner yoga practice with poses and aerial elements"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "zumba",
+    "name": "Zumba",
+    "metadata": {
+      "description": "High-energy Latin-inspired dance fitness class"
+    },
+    "parents": ["athletic-physical-hobbies"]
+  },
+  {
+    "slug": "creative-crafting-hobbies",
+    "name": "Creative & Crafting Hobbies",
+    "isRoot": true,
+    "metadata": { "description": "Art, crafts, music, and creative making" },
+    "parents": []
+  },
+  {
+    "slug": "crocheting",
+    "name": "Crocheting",
+    "metadata": { "description": "Creating fabric from yarn using a hook" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "knitting",
+    "name": "Knitting",
+    "metadata": { "description": "Creating fabric from yarn using needles" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "embroidery",
+    "name": "Embroidery",
+    "metadata": { "description": "Decorative stitching on fabric" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "sewing",
+    "name": "Sewing",
+    "metadata": {
+      "description": "Stitching fabric together to create or repair items"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "card-making",
+    "name": "Card Making",
+    "metadata": {
+      "description": "Creating handmade greeting and decorative cards"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "quilt-making",
+    "name": "Quilt Making",
+    "metadata": {
+      "description": "Sewing patches of fabric into quilted blankets"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "clothing-making",
+    "name": "Clothing Making",
+    "metadata": { "description": "Designing and sewing garments" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "drawing",
+    "name": "Drawing",
+    "metadata": {
+      "description": "Creating images with pencils, pens, or charcoal"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "painting",
+    "name": "Painting",
+    "metadata": {
+      "description": "Creating visual art with paints and brushes"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "watercolors",
+    "name": "Watercolors",
+    "metadata": {
+      "description": "Painting with transparent watercolor pigments"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "sketching",
+    "name": "Sketching",
+    "metadata": {
+      "description": "Quick drawing studies and preliminary artwork"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "wreath-making",
+    "name": "Wreath Making",
+    "metadata": { "description": "Creating decorative circular arrangements" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "pottery",
+    "name": "Pottery",
+    "metadata": { "description": "Creating ceramic vessels and sculptures" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "wood-burning",
+    "name": "Wood Burning",
+    "metadata": { "description": "Decorative burning designs into wood" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "playing-instrument",
+    "name": "Playing an Instrument",
+    "metadata": { "description": "Playing musical instruments" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "singing",
+    "name": "Singing",
+    "metadata": { "description": "Vocal music performance and practice" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "calligraphy",
+    "name": "Calligraphy",
+    "metadata": { "description": "Decorative hand lettering and writing" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "scrapbooking",
+    "name": "Scrapbooking",
+    "metadata": {
+      "description": "Creating decorated albums with photos and memorabilia"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "papier-mache",
+    "name": "Papier-mâché",
+    "metadata": { "description": "Building sculptures with paper and paste" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "candle-making",
+    "name": "Candle Making",
+    "metadata": { "description": "Creating scented and decorative candles" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "poetry",
+    "name": "Poetry",
+    "metadata": { "description": "Writing and reading verse" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "journaling",
+    "name": "Journaling",
+    "metadata": {
+      "description": "Writing personal thoughts and reflections regularly"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "jewelry-making",
+    "name": "Jewelry Making",
+    "metadata": { "description": "Crafting beaded and metal jewelry" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "flower-arranging",
+    "name": "Flower Arranging",
+    "metadata": {
+      "description": "Arranging cut flowers and plants decoratively"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "photography",
+    "name": "Photography",
+    "metadata": { "description": "Capturing images with a camera" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "bullet-journaling",
+    "name": "Bullet Journaling",
+    "metadata": {
+      "description": "System of hand-written organization and planning"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "collaging",
+    "name": "Collaging",
+    "metadata": {
+      "description": "Creating art by assembling and combining images"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "flower-pressing",
+    "name": "Flower Pressing",
+    "metadata": {
+      "description": "Preserving flowers by pressing between paper"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "music-production",
+    "name": "Music Production Software",
+    "metadata": { "description": "Creating and producing music digitally" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "photo-editing",
+    "name": "Photo Editing",
+    "metadata": { "description": "Editing and enhancing digital photographs" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "video-editing",
+    "name": "Video Editing",
+    "metadata": { "description": "Editing and producing videos" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "soap-making",
+    "name": "Soap Making",
+    "metadata": { "description": "Crafting handmade soaps" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "3d-printing",
+    "name": "3D Printing",
+    "metadata": {
+      "description": "Creating objects using 3D printing technology"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "paper-quilling",
+    "name": "Paper Quilling",
+    "metadata": {
+      "description": "Creating decorative designs with rolled paper strips"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "origami",
+    "name": "Origami",
+    "metadata": {
+      "description": "Japanese art of folding paper into sculptures"
+    },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "miniature-painting",
+    "name": "Miniature Painting",
+    "metadata": { "description": "Painting tiny figures and models" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "cross-stitching",
+    "name": "Cross Stitching",
+    "metadata": { "description": "Embroidering X-shaped stitches on fabric" },
+    "parents": ["creative-crafting-hobbies"]
+  },
+  {
+    "slug": "intellectual-hobbies",
+    "name": "Intellectual Hobbies",
+    "isRoot": true,
+    "metadata": {
+      "description": "Learning, reading, and intellectual pursuits"
+    },
+    "parents": []
+  },
+  {
+    "slug": "reading",
+    "name": "Reading",
+    "metadata": {
+      "description": "Reading books, articles, and literary works"
+    },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "visiting-libraries",
+    "name": "Visiting Libraries",
+    "metadata": { "description": "Exploring and borrowing from libraries" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "visiting-museums",
+    "name": "Visiting Museums",
+    "metadata": { "description": "Exploring art and historical exhibits" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "learning-language",
+    "name": "Learning a Language",
+    "metadata": { "description": "Studying and practicing foreign languages" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "online-classes",
+    "name": "Online Classes",
+    "metadata": { "description": "Taking educational courses online" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "free-college-classes",
+    "name": "Free College Classes",
+    "metadata": { "description": "Taking free university-level courses" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "workshops",
+    "name": "Workshops",
+    "metadata": {
+      "description": "Attending hands-on training and learning sessions"
+    },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "blogging",
+    "name": "Blogging",
+    "metadata": { "description": "Writing and maintaining a blog" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "podcasts",
+    "name": "Listening to Podcasts",
+    "metadata": {
+      "description": "Listening to audio-based shows and discussions"
+    },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "audiobooks",
+    "name": "Listening to Audiobooks",
+    "metadata": { "description": "Listening to narrated book recordings" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "documentaries",
+    "name": "Watching Documentaries",
+    "metadata": { "description": "Watching educational documentary films" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "researching",
+    "name": "Researching",
+    "metadata": { "description": "Conducting research on topics of interest" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "book-club",
+    "name": "Joining a Book Club",
+    "metadata": { "description": "Discussing books with a reading group" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "studying-film",
+    "name": "Studying Film",
+    "metadata": { "description": "Analyzing and studying cinema and movies" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "public-speaking",
+    "name": "Public Speaking",
+    "metadata": { "description": "Presenting and speaking to audiences" },
+    "parents": ["intellectual-hobbies"]
+  },
+  {
+    "slug": "collecting-hobbies",
+    "name": "Collecting Hobbies",
+    "isRoot": true,
+    "metadata": { "description": "Collecting and curating items" },
+    "parents": []
+  },
+  {
+    "slug": "collecting-crystals",
+    "name": "Crystals",
+    "metadata": { "description": "Collecting minerals and crystal specimens" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-magnets",
+    "name": "Magnets",
+    "metadata": { "description": "Collecting decorative and rare magnets" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-coins",
+    "name": "Coins",
+    "metadata": { "description": "Collecting currency and numismatic items" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "sports-memorabilia",
+    "name": "Sports Memorabilia",
+    "metadata": {
+      "description": "Collecting sports equipment, cards, and memorabilia"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-buttons-pins",
+    "name": "Buttons & Pins",
+    "metadata": {
+      "description": "Collecting vintage and unique buttons and pins"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-tshirts",
+    "name": "T-shirts",
+    "metadata": { "description": "Collecting graphic and vintage t-shirts" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "travel-souvenirs",
+    "name": "Travel Souvenirs",
+    "metadata": { "description": "Collecting mementos from travels" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "sea-glass",
+    "name": "Sea Glass",
+    "metadata": {
+      "description": "Collecting frosted glass pieces from the beach"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "seashells",
+    "name": "Seashells",
+    "metadata": { "description": "Collecting shells and mollusks" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "driftwood",
+    "name": "Driftwood",
+    "metadata": {
+      "description": "Collecting weathered wood from beaches and water"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "vintage-decor",
+    "name": "Vintage Decor",
+    "metadata": { "description": "Collecting vintage decorative items" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "vintage-clothing",
+    "name": "Vintage Clothing",
+    "metadata": { "description": "Collecting vintage and retro fashion" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-books",
+    "name": "Books",
+    "metadata": { "description": "Collecting books and rare editions" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "houseplants",
+    "name": "Houseplants",
+    "metadata": { "description": "Growing and collecting indoor plants" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-stamps",
+    "name": "Stamps",
+    "metadata": {
+      "description": "Collecting postage stamps from around the world"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-teacups",
+    "name": "Teacups",
+    "metadata": { "description": "Collecting decorative teacups and saucers" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-art",
+    "name": "Art",
+    "metadata": { "description": "Collecting artworks and prints" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "action-figures",
+    "name": "Action Figures",
+    "metadata": { "description": "Collecting toys and action figures" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "collecting-matches",
+    "name": "Matches",
+    "metadata": { "description": "Collecting matchboxes and matchbook covers" },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "trading-cards",
+    "name": "Trading Cards",
+    "metadata": {
+      "description": "Collecting sports, game, or entertainment trading cards"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "antiques",
+    "name": "Antiques",
+    "metadata": {
+      "description": "Collecting antique furniture and vintage items"
+    },
+    "parents": ["collecting-hobbies"]
+  },
+  {
+    "slug": "food-drink-hobbies",
+    "name": "Food & Drink Hobbies",
+    "isRoot": true,
+    "metadata": { "description": "Culinary arts and beverage appreciation" },
+    "parents": []
+  },
+  {
+    "slug": "cooking",
+    "name": "Cooking",
+    "metadata": {
+      "description": "Preparing meals and experimenting with recipes"
+    },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "baking",
+    "name": "Baking",
+    "metadata": { "description": "Making bread, pastries, and desserts" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "grilling",
+    "name": "Grilling",
+    "metadata": { "description": "Cooking outdoors on a grill" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "collecting-cookbooks",
+    "name": "Collecting Cookbooks",
+    "metadata": {
+      "description": "Collecting recipe books and culinary literature"
+    },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "wine-tasting",
+    "name": "Wine Tasting",
+    "metadata": { "description": "Tasting and learning about wines" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "cocktail-crafting",
+    "name": "Crafting Cocktails",
+    "metadata": { "description": "Mixing drinks and creating cocktails" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "specialty-beers",
+    "name": "Specialty Beers",
+    "metadata": {
+      "description": "Tasting and collecting craft and specialty beers"
+    },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "food-drink-blogging",
+    "name": "Food/Drink Blogging",
+    "metadata": { "description": "Writing about food and drink experiences" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "cooking-classes",
+    "name": "Cooking Classes",
+    "metadata": { "description": "Taking culinary classes and lessons" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "hosting-dinner-parties",
+    "name": "Hosting Dinner Parties",
+    "metadata": { "description": "Planning and hosting dinner gatherings" },
+    "parents": ["food-drink-hobbies"]
+  },
+  {
+    "slug": "game-hobbies",
+    "name": "Game Hobbies",
+    "isRoot": true,
+    "metadata": {
+      "description": "Games and puzzles for mental challenge and entertainment"
+    },
+    "parents": []
+  },
+  {
+    "slug": "card-games",
+    "name": "Card Games",
+    "metadata": { "description": "Playing various card games" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "poker",
+    "name": "Poker",
+    "metadata": { "description": "Playing poker card game" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "video-games",
+    "name": "Video Games",
+    "metadata": { "description": "Playing video and computer games" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "jigsaw-puzzles",
+    "name": "Jigsaw Puzzles",
+    "metadata": { "description": "Assembling jigsaw puzzle pieces" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "crossword-puzzles",
+    "name": "Crossword Puzzles",
+    "metadata": { "description": "Solving crossword puzzle clues" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "sudoku-puzzles",
+    "name": "Sudoku Puzzles",
+    "metadata": { "description": "Solving number logic puzzles" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "chess",
+    "name": "Chess",
+    "metadata": { "description": "Playing the strategy board game chess" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "checkers",
+    "name": "Checkers",
+    "metadata": { "description": "Playing the board game checkers" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "brain-word-games",
+    "name": "Other Brain or Word Games",
+    "metadata": { "description": "Playing word games and brain teasers" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "board-games",
+    "name": "Other Board Games",
+    "metadata": { "description": "Playing tabletop and board games" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "darts",
+    "name": "Darts",
+    "metadata": { "description": "Throwing darts at a dartboard" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "pool",
+    "name": "Pool",
+    "metadata": { "description": "Playing pool and billiards" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "air-hockey",
+    "name": "Air Hockey",
+    "metadata": { "description": "Playing air hockey game" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "bingo",
+    "name": "Bingo",
+    "metadata": { "description": "Playing bingo game" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "bunco",
+    "name": "Bunco",
+    "metadata": { "description": "Playing dice game bunco" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "euchre",
+    "name": "Euchre",
+    "metadata": { "description": "Playing the card game euchre" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "role-playing-games",
+    "name": "Role-playing Games",
+    "metadata": { "description": "Playing tabletop RPGs and fantasy games" },
+    "parents": ["game-hobbies"]
+  },
+  {
+    "slug": "outdoor-hobbies",
+    "name": "Outdoor Hobbies",
+    "isRoot": true,
+    "metadata": {
+      "description": "Outdoor activities and nature-based pursuits"
+    },
+    "parents": []
+  },
+  {
+    "slug": "hiking",
+    "name": "Hiking",
+    "metadata": {
+      "description": "Walking trails and exploring natural landscapes"
+    },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "trail-walking",
+    "name": "Trail Walking",
+    "metadata": { "description": "Walking marked trails and nature paths" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "sightseeing",
+    "name": "Sightseeing",
+    "metadata": { "description": "Visiting and exploring points of interest" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "gardening",
+    "name": "Gardening",
+    "metadata": { "description": "Growing plants, vegetables, and flowers" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "rock-climbing",
+    "name": "Rock Climbing",
+    "metadata": { "description": "Climbing rock faces and boulders" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "birdwatching",
+    "name": "Birdwatching",
+    "metadata": { "description": "Observing and identifying birds in nature" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "fishing",
+    "name": "Fishing",
+    "metadata": { "description": "Catching fish as a recreational activity" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "hunting",
+    "name": "Hunting",
+    "metadata": { "description": "Hunting game and wildlife" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "scuba-diving",
+    "name": "Scuba Diving",
+    "metadata": { "description": "Diving underwater with breathing apparatus" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "surfing",
+    "name": "Surfing",
+    "metadata": { "description": "Riding ocean waves on a surfboard" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "parasailing",
+    "name": "Parasailing",
+    "metadata": {
+      "description": "Gliding through the air while towed by a boat"
+    },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "sky-diving",
+    "name": "Sky Diving",
+    "metadata": { "description": "Parachuting from aircraft" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "horseback-riding",
+    "name": "Horseback Riding",
+    "metadata": { "description": "Riding and handling horses" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "snowboarding",
+    "name": "Snowboarding",
+    "metadata": { "description": "Riding snow slopes on a snowboard" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "skiing",
+    "name": "Skiing",
+    "metadata": { "description": "Skiing down snow-covered slopes" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "sledding",
+    "name": "Sledding",
+    "metadata": { "description": "Sledding down snowy hills" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "snowshoeing",
+    "name": "Snowshoeing",
+    "metadata": { "description": "Walking in snow with snowshoes" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "rucking",
+    "name": "Rucking",
+    "metadata": { "description": "Walking with a weighted backpack" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "stargazing",
+    "name": "Star Gazing",
+    "metadata": {
+      "description": "Observing and studying stars and constellations"
+    },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "lawn-games",
+    "name": "Lawn Games",
+    "metadata": { "description": "Playing casual games on grass" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "frisbee-golf",
+    "name": "Frisbee Golf",
+    "metadata": { "description": "Playing disc golf on outdoor courses" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "kayaking",
+    "name": "Kayaking",
+    "metadata": { "description": "Paddling in kayaks on water" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "foraging",
+    "name": "Foraging",
+    "metadata": { "description": "Gathering wild edible plants and mushrooms" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "cloud-watching",
+    "name": "Cloud Watching",
+    "metadata": { "description": "Observing cloud formations and patterns" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "plane-spotting",
+    "name": "Plane Spotting",
+    "metadata": { "description": "Observing and identifying aircraft" },
+    "parents": ["outdoor-hobbies"]
+  },
+  {
+    "slug": "social-hobbies",
+    "name": "Social Hobbies",
+    "isRoot": true,
+    "metadata": { "description": "Social activities and group-based pursuits" },
+    "parents": []
+  },
+  {
+    "slug": "trivia",
+    "name": "Trivia",
+    "metadata": {
+      "description": "Participating in trivia games and competitions"
+    },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "volunteering",
+    "name": "Volunteering",
+    "metadata": {
+      "description": "Volunteering for causes and community service"
+    },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "running-clubs",
+    "name": "Running Clubs",
+    "metadata": { "description": "Joining community running groups" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "hiking-clubs",
+    "name": "Hiking Clubs",
+    "metadata": { "description": "Joining group hiking and trail exploration" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "theatre",
+    "name": "Theatre",
+    "metadata": {
+      "description": "Attending and performing in theatre productions"
+    },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "chess-club",
+    "name": "Chess Club",
+    "metadata": { "description": "Joining chess clubs and competitions" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "gaming-club",
+    "name": "Gaming Club",
+    "metadata": { "description": "Joining gaming groups and clubs" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "community-gardening",
+    "name": "Community Gardening",
+    "metadata": { "description": "Participating in shared community gardens" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "group-camping",
+    "name": "Group Camping",
+    "metadata": { "description": "Camping trips with friends and groups" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "canoeing",
+    "name": "Canoeing",
+    "metadata": { "description": "Paddling canoes on waterways" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "workout-classes",
+    "name": "Workout Classes",
+    "metadata": { "description": "Attending group fitness classes" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "dance-classes",
+    "name": "Dance Classes",
+    "metadata": { "description": "Attending group dance instruction" },
+    "parents": ["social-hobbies"]
+  },
+  {
+    "slug": "self-care-hobbies",
+    "name": "Self-Care Hobbies",
+    "isRoot": true,
+    "metadata": {
+      "description": "Wellness, relaxation, and personal development"
+    },
+    "parents": []
+  },
+  {
+    "slug": "self-massage",
+    "name": "Self-Massage",
+    "metadata": {
+      "description": "Practicing self-massage for relaxation and wellness"
+    },
+    "parents": ["self-care-hobbies"]
+  },
+  {
+    "slug": "sound-baths",
+    "name": "Sound Baths",
+    "metadata": {
+      "description": "Listening to sound frequencies for relaxation"
+    },
+    "parents": ["self-care-hobbies"]
+  },
+  {
+    "slug": "meditation",
+    "name": "Meditation",
+    "metadata": { "description": "Practicing mindfulness and meditation" },
+    "parents": ["self-care-hobbies"]
+  },
+  {
+    "slug": "astrology",
+    "name": "Astrology",
+    "metadata": { "description": "Learning about and exploring astrology" },
+    "parents": ["self-care-hobbies"]
+  },
+  {
+    "slug": "skincare",
+    "name": "Skin Care",
+    "metadata": { "description": "Maintaining and improving skin health" },
+    "parents": ["self-care-hobbies"]
+  },
+  {
+    "slug": "yoga-nidra",
+    "name": "Yoga Nidra",
+    "metadata": {
+      "description": "Practicing guided meditation and body scan relaxation"
+    },
+    "parents": ["self-care-hobbies"]
+  }
+]

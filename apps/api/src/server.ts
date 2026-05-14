@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { createClient } from '@supabase/supabase-js';
 import { getBearerToken } from './auth.js';
 import { getEnv } from './env.js';
+import { registerInterestsRoutes } from './routes/interests.js';
 import { registerAuthRoutes } from './routes/auth.js';
 
 export function buildServer() {
@@ -37,6 +38,7 @@ export function buildServer() {
       : null;
 
   registerAuthRoutes(app, { supabasePublic, supabaseAdmin });
+  registerInterestsRoutes(app, { supabaseAdmin });
 
   app.get('/health', async () => {
     return { ok: true };

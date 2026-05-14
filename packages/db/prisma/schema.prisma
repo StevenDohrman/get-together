@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
   // Connection is configured via prisma.config.ts
 }
 
@@ -23,10 +25,45 @@ model Interest {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
   name      String
+  metadata  Json?
+  isRoot    Boolean  @default(false) @map("is_root")
   createdAt DateTime @default(now())
+
+  // Relations to represent a Directed Acyclic Graph (DAG)
+  parents  InterestRelation[] @relation("child_relations")
+  children InterestRelation[] @relation("parent_relations")
 
   users  UserInterest[]
   groups GroupInterest[]
+
+  embedding InterestEmbedding?
+}
+
+// Join table for self-referential many-to-many to model DAG edges
+model InterestRelation {
+  parent   Interest @relation("parent_relations", fields: [parentId], references: [id], onDelete: Cascade)
+  parentId String   @db.Uuid @map("parent_id")
+  child    Interest @relation("child_relations", fields: [childId], references: [id], onDelete: Cascade)
+  childId  String   @db.Uuid @map("child_id")
+
+  // Optional weight or ordering for the relation
+  weight Int? @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([parentId, childId])
+  @@index([childId])
+}
+
+model InterestEmbedding {
+  id         String   @id @default(uuid()) @db.Uuid
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+  interestId String                   @db.Uuid @unique @map("interest_id")
+  vector     Unsupported("vector(768)")
+  model      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([interestId])
 }
 
 model User {
