@@ -332,8 +332,10 @@ export default function ProfilePage() {
       selectedInterests.map((i) => ({ id: i.id, weight: i.weight })),
     );
     if (currentState === lastSavedState.current) return;
-    if (currentState === lastFailedState.current) return;
-    lastFailedState.current = '';
+    if (lastFailedState.current) {
+      if (currentState === lastFailedState.current) return;
+      lastFailedState.current = '';
+    }
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
