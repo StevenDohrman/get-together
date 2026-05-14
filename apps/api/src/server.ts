@@ -1,10 +1,10 @@
-import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { createClient } from '@supabase/supabase-js';
+import Fastify from 'fastify';
 import { getBearerToken } from './auth.js';
 import { getEnv } from './env.js';
-import { registerInterestsRoutes } from './routes/interests.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerInterestsRoutes } from './routes/interests.js';
 
 export function buildServer() {
   const env = getEnv();
@@ -21,6 +21,7 @@ export function buildServer() {
   app.register(cors, {
     origin: true,
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   const supabasePublic =
@@ -47,7 +48,8 @@ export function buildServer() {
   app.get('/me', async (req, reply) => {
     if (!supabaseAdmin) {
       return reply.status(501).send({
-        error: 'Supabase admin auth is not configured (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)',
+        error:
+          'Supabase admin auth is not configured (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)',
       });
     }
 
