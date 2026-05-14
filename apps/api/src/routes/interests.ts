@@ -29,14 +29,22 @@ export function registerInterestsRoutes(app: FastifyInstance, deps: InterestsRou
 
   // Return a tree of interests (nested children). Optional `depth` query param.
   app.get('/interests/tree', async (req, reply) => {
-    const depth = parseInt(String((req.query as any)?.depth ?? '5'), 10);
+    const rawDepth = parseInt(String((req.query as any)?.depth ?? '5'), 10);
+    const depth = Number.isFinite(rawDepth) ? Math.min(Math.max(rawDepth, 0), 10) : 5;
     if (!supabaseAdmin) return reply.status(501).send({ error: 'Supabase admin not configured' });
 
     // Load interests and relations, then assemble tree in-memory
-    const [{ data: interests }, { data: relations }] = await Promise.all([
+    const [
+      { data: interests, error: interestsError },
+      { data: relations, error: relationsError },
+    ] = await Promise.all([
       supabaseAdmin.from('Interest').select('id,slug,name,metadata,is_root,createdAt'),
       supabaseAdmin.from('InterestRelation').select('parent_id,child_id'),
     ]);
+
+    if (interestsError || relationsError) {
+      return reply.status(500).send({ error: interestsError?.message ?? relationsError?.message });
+    }
 
     if (!interests) return reply.status(500).send({ error: 'Failed to load interests' });
 
@@ -71,13 +79,17 @@ export function registerInterestsRoutes(app: FastifyInstance, deps: InterestsRou
     const depth = parseInt(String((req.query as any)?.depth ?? '1'), 10);
     if (!supabaseAdmin) return reply.status(501).send({ error: 'Supabase admin not configured' });
 
+    const { data: allRels, error: relsError } = await supabaseAdmin
+      .from('InterestRelation')
+      .select('parent_id,child_id');
+    if (relsError) return reply.status(500).send({ error: relsError.message });
+
     // BFS
     const visited = new Set<string>();
     const result = new Set<string>();
     let frontier = [id];
     for (let d = 0; d < depth; d++) {
       if (frontier.length === 0) break;
-      const { data: allRels } = await supabaseAdmin.from('InterestRelation').select('parent_id,child_id');
       const next: string[] = [];
       for (const r of (allRels ?? [])) {
         if (frontier.includes(r.parent_id) && !visited.has(r.child_id)) {

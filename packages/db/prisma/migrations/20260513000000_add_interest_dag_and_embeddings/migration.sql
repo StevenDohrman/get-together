@@ -5,7 +5,7 @@ BEGIN;
 -- Add metadata and is_root to existing interest table
 ALTER TABLE "Interest"
   ADD COLUMN IF NOT EXISTS metadata jsonb,
-  ADD COLUMN IF NOT EXISTS is_root boolean DEFAULT false;
+  ADD COLUMN IF NOT EXISTS is_root boolean NOT NULL DEFAULT false;
 
 -- Create interest_relation join table for DAG edges
 CREATE TABLE IF NOT EXISTS "InterestRelation" (
