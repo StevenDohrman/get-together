@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import Fastify from 'fastify';
 import { getBearerToken } from './auth.js';
 import { getEnv } from './env.js';
+import { registerInterestsRoutes } from './routes/interests.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerInterestsRoutes } from './routes/interests.js';
 
