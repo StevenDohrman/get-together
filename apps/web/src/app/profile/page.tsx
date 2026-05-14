@@ -333,6 +333,7 @@ export default function ProfilePage() {
     );
     if (currentState === lastSavedState.current) return;
     if (currentState === lastFailedState.current) return;
+    lastFailedState.current = '';
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
