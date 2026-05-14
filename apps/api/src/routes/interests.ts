@@ -179,9 +179,7 @@ export function registerInterestsRoutes(
 
     const resolved = await resolveAuthedUser(supabaseAdmin, req);
     if ('error' in resolved) {
-      return reply
-        .status(resolved.error === 'Missing bearer token' ? 401 : 401)
-        .send({ error: resolved.error });
+      return reply.status(401).send({ error: resolved.error });
     }
 
     const loaded = await loadInterestRows(supabaseAdmin, resolved.user.id);
@@ -246,12 +244,14 @@ export function registerInterestsRoutes(
       }),
     );
 
-    const { error } = await supabaseAdmin
-      .from('UserInterest')
-      .upsert(upsertPayload, { onConflict: 'userId,interestId' });
+    if (upsertPayload.length > 0) {
+      const { error } = await supabaseAdmin
+        .from('UserInterest')
+        .upsert(upsertPayload, { onConflict: 'userId,interestId' });
 
-    if (error) {
-      return reply.status(500).send({ error: error.message });
+      if (error) {
+        return reply.status(500).send({ error: error.message });
+      }
     }
 
     const { data: existingRows, error: existingError } = await supabaseAdmin

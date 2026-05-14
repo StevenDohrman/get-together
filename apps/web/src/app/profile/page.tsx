@@ -130,7 +130,7 @@ export default function ProfilePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const saveTimeoutRef = useRef<NodeJS.Timeout>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const initialLoadDone = useRef<boolean>(false);
   const lastSavedState = useRef<string>('');
 
