@@ -91,7 +91,7 @@ Prisma lives in `packages/db` and targets Postgres.
 
 The starter interest catalog is seeded from `packages/db/prisma/seed.js`. Add new default interests there, then rerun `pnpm -C packages/db seed`.
 
-The API exposes them at `GET /interests` so web/mobile can populate a future picker from the database.
+The API exposes them under `GET /interests` (and related routes) **with a valid Supabase access token** in the `Authorization: Bearer …` header so web/mobile can populate a future picker. Direct PostgREST access to app tables from the browser is blocked via row-level security; use the API for application data.
 
 ### Generating Embeddings
 

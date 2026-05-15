@@ -2,14 +2,14 @@
 
 import { apiGet, apiJson } from '@/lib/api';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
-type User = {
-  id: string;
+type ProfilePayload = {
+  supabaseUserId: string;
   email: string | null;
-  user_metadata?: {
-    username?: string;
-  };
+  appUserId: string | null;
+  username: string | null;
+  displayName: string | null;
 };
 
 type Interest = {
@@ -39,33 +39,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function getRecordProp(
-  obj: unknown,
-  key: string,
-): Record<string, unknown> | null {
-  if (!isRecord(obj)) return null;
-  const value = obj[key];
-  return isRecord(value) ? value : null;
+function optString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  return value;
 }
 
-function getStringProp(obj: unknown, key: string): string | null {
-  if (!isRecord(obj)) return null;
-  const value = obj[key];
-  return typeof value === 'string' ? value : null;
-}
-
-function getUserFromMeResponse(payload: unknown): User | null {
+function parseProfile(payload: unknown): ProfilePayload | null {
   if (!isRecord(payload)) return null;
-  const user = getRecordProp(payload, 'user');
-  if (!user) return null;
-  const id = getStringProp(user, 'id');
-  if (!id) return null;
-  const email = getStringProp(user, 'email');
-  const userMetadata = getRecordProp(user, 'user_metadata');
-  const username = userMetadata
-    ? (getStringProp(userMetadata, 'username') ?? undefined)
-    : undefined;
-  return { id, email, user_metadata: username ? { username } : undefined };
+  const supabaseUserId = payload.supabaseUserId;
+  if (typeof supabaseUserId !== 'string') return null;
+  return {
+    supabaseUserId,
+    email: typeof payload.email === 'string' ? payload.email : null,
+    appUserId: typeof payload.appUserId === 'string' ? payload.appUserId : null,
+    username: optString(payload.username),
+    displayName: optString(payload.displayName),
+  };
 }
 
 function clampWeight(value: number): number {
@@ -114,8 +104,9 @@ function InterestCard(props: {
 
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
   const [catalog, setCatalog] = useState<Interest[]>([]);
   const [selectedInterests, setSelectedInterests] = useState<
@@ -135,10 +126,16 @@ export default function ProfilePage() {
   const lastSavedState = useRef<string>('');
   const lastFailedState = useRef<string>('');
 
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
+  const getSupabase = useCallback(() => {
+    if (!supabaseRef.current) {
+      supabaseRef.current = getSupabaseBrowserClient();
+    }
+    return supabaseRef.current;
+  }, []);
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
-  const signedInAs = user?.email ?? user?.id ?? '';
+  const signedInAs = profile?.email ?? profile?.supabaseUserId ?? '';
 
   const selectedById = useMemo(() => {
     return new Map(
@@ -185,21 +182,40 @@ export default function ProfilePage() {
 
       try {
         const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession();
+          await getSupabase().auth.getSession();
         if (sessionError) throw new Error(sessionError.message);
-        if (!sessionData.session) throw new Error('Not signed in');
+        if (!sessionData.session) {
+          if (!cancelled) {
+            setProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
 
-        const { data, error: userError } = await supabase.auth.getUser();
-        if (userError || !data.user)
-          throw new Error(userError?.message ?? 'Not signed in');
+        const accessToken = sessionData.session.access_token;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+        const res = await fetch(`${apiUrl}/profile`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
 
-        const parsed = getUserFromMeResponse({ user: data.user });
-        if (!parsed) throw new Error('Unexpected user');
+        const body: unknown = await res.json();
+
+        if (!res.ok) {
+          const msg =
+            typeof body === 'object' && body !== null && 'error' in body
+              ? String((body as Record<string, unknown>).error)
+              : 'Failed to load profile';
+          throw new Error(msg);
+        }
+
+        const parsed = parseProfile(body);
+        if (!parsed) throw new Error('Unexpected profile response');
 
         if (cancelled) return;
 
-        setUser(parsed);
-        setUsername(parsed.user_metadata?.username ?? '');
+        setProfile(parsed);
+        setUsername(parsed.username ?? '');
+        setDisplayName(parsed.displayName ?? '');
         setLoading(false);
         setInterestsLoading(true);
 
@@ -236,7 +252,7 @@ export default function ProfilePage() {
         }
       } catch (e) {
         if (!cancelled) {
-          setUser(null);
+          setProfile(null);
           setError(e instanceof Error ? e.message : 'Failed to load profile');
           setLoading(false);
           setInterestsLoading(false);
@@ -248,35 +264,72 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [getSupabase]);
 
-  async function saveUsername() {
+  async function saveProfile() {
     setError(null);
     setInfo(null);
 
-    const next = username.trim();
-    if (next.length < 3 || next.length > 30 || !/^[a-zA-Z0-9_]+$/.test(next)) {
+    const nextUsername = username.trim();
+    const nextDisplay = displayName.trim();
+
+    if (
+      nextUsername.length > 0 &&
+      (nextUsername.length < 3 ||
+        nextUsername.length > 30 ||
+        !/^[a-zA-Z0-9_]+$/.test(nextUsername))
+    ) {
       setError(
-        'Username must be 3-30 chars and use letters/numbers/underscore.',
+        'Username must be 3–30 chars and use letters, numbers, or underscore.',
       );
+      return;
+    }
+
+    if (nextDisplay.length > 80) {
+      setError('Display name must be at most 80 characters.');
       return;
     }
 
     setSaving(true);
     try {
-      const { data, error: updateError } = await supabase.auth.updateUser({
-        data: {
-          username: next,
+      const { data: sessionData } = await getSupabase().auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Not signed in');
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+      const payload: { username: string | null; displayName: string | null } = {
+        username: nextUsername.length === 0 ? null : nextUsername,
+        displayName: nextDisplay.length === 0 ? null : nextDisplay,
+      };
+
+      const res = await fetch(`${apiUrl}/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
+        body: JSON.stringify(payload),
       });
 
-      if (updateError || !data.user) {
-        throw new Error(updateError?.message ?? 'Update failed');
+      const body: unknown = await res.json();
+
+      if (!res.ok) {
+        const msg =
+          typeof body === 'object' && body !== null && 'error' in body
+            ? String((body as Record<string, unknown>).error)
+            : 'Update failed';
+        throw new Error(msg);
       }
 
-      const updated = getUserFromMeResponse({ user: data.user });
-      if (!updated) throw new Error('Unexpected user');
-      setUser(updated);
+      const updated = parseProfile(body);
+      if (!updated) throw new Error('Unexpected response');
+      setProfile(updated);
+      setUsername(updated.username ?? '');
+      setDisplayName(updated.displayName ?? '');
+
+      await getSupabase().auth.refreshSession();
+
       setInfo('Saved');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');
@@ -394,7 +447,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user) {
+  if (!profile && !error) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-16 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
         <div className="w-full max-w-md rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
@@ -415,6 +468,29 @@ export default function ProfilePage() {
     );
   }
 
+  if (!profile && error) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-16 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
+        <div className="w-full max-w-md rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
+          <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
+            Profile
+          </h1>
+          <p className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>
+          <a
+            className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl border border-black/8 px-4 text-sm font-medium text-black dark:border-white/12 dark:text-zinc-50"
+            href="/auth"
+          >
+            Back to sign in
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return null;
+  }
+
   return (
     <div className="flex flex-1 justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-10 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
       <div className="w-full max-w-5xl space-y-6">
@@ -428,15 +504,15 @@ export default function ProfilePage() {
                 Shape your profile
               </h1>
               <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                Update your username and rank the interests that matter most to
-                you.
+                Update your display name, username, and rank the interests that
+                matter most to you.
               </p>
             </div>
             <button
               type="button"
               className="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
               onClick={() => {
-                supabase.auth.signOut().finally(() => {
+                getSupabase().auth.signOut().finally(() => {
                   window.location.href = '/auth';
                 });
               }}
@@ -446,34 +522,62 @@ export default function ProfilePage() {
           </div>
 
           <div className="mt-6 rounded-2xl border border-black/8 bg-white p-5 dark:border-white/12 dark:bg-black/30">
-            <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+            <div className="space-y-5">
               <div>
                 <label
                   className="text-sm font-medium text-black dark:text-zinc-50"
-                  htmlFor="username"
+                  htmlFor="displayName"
                 >
-                  Username
+                  Display name
                 </label>
                 <input
-                  id="username"
+                  id="displayName"
                   type="text"
-                  autoComplete="username"
+                  autoComplete="name"
                   className="mt-2 h-12 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                   disabled={saving}
-                  placeholder="your_name"
+                  placeholder="How you want to be shown"
                 />
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  Optional. Does not need to be unique.
+                </p>
               </div>
 
-              <button
-                type="button"
-                className="flex h-12 items-center justify-center rounded-2xl bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-                onClick={saveUsername}
-                disabled={saving}
-              >
-                {saving ? 'Saving…' : 'Save username'}
-              </button>
+              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+                <div>
+                  <label
+                    className="text-sm font-medium text-black dark:text-zinc-50"
+                    htmlFor="username"
+                  >
+                    Username
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    autoComplete="username"
+                    className="mt-2 h-12 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    disabled={saving}
+                    placeholder="unique_handle"
+                  />
+                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    Optional. Unique in the app (letters, numbers, underscore;
+                    3–30 chars).
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="flex h-12 items-center justify-center rounded-2xl bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
+                  onClick={saveProfile}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Save profile'}
+                </button>
+              </div>
             </div>
 
             <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -506,6 +610,21 @@ export default function ProfilePage() {
               Search the catalog, add what fits, then score each one from 0 to
               10.
             </p>
+            {interestSaving ? (
+              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Saving your interests…
+              </p>
+            ) : null}
+            {interestError ? (
+              <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+                {interestError}
+              </p>
+            ) : null}
+            {interestInfo ? (
+              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                {interestInfo}
+              </p>
+            ) : null}
           </div>
 
           <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
