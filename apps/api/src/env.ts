@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   API_PORT: z.coerce.number().default(4000),
+  /** Comma-separated browser origins allowed to call the API (CORS). Requests with no Origin (e.g. mobile) are allowed. */
+  API_CORS_ORIGINS: z.string().optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),

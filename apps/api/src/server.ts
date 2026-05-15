@@ -1,11 +1,43 @@
+import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { createClient } from '@supabase/supabase-js';
-import Fastify from 'fastify';
-import { getBearerToken } from './auth.js';
-import { getEnv } from './env.js';
+import { requireAuthenticatedUser } from './auth.js';
+import { getEnv, type Env } from './env.js';
 import { registerInterestsRoutes } from './routes/interests.js';
 import { registerAuthRoutes } from './routes/auth.js';
-import { registerInterestsRoutes } from './routes/interests.js';
+import { registerProfileRoutes } from './routes/profile.js';
+
+function parseCorsOriginList(raw: string | undefined): Set<string> {
+  const trimmed = raw?.trim();
+  if (!trimmed) return new Set();
+  return new Set(trimmed.split(',').map(s => s.trim()).filter(Boolean));
+}
+
+/** Next.js / Vite etc. on loopback, any port (incl. [::1]) when not using an explicit CORS list. */
+function isDevLoopbackOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    return ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isCorsOriginAllowed(origin: string | undefined, env: Env): boolean {
+  if (origin === undefined || origin.length === 0) return true;
+
+  const explicit = env.API_CORS_ORIGINS?.trim();
+  if (explicit) {
+    return parseCorsOriginList(explicit).has(origin);
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  return isDevLoopbackOrigin(origin);
+}
 
 export function buildServer() {
   const env = getEnv();
@@ -20,17 +52,20 @@ export function buildServer() {
   });
 
   app.register(cors, {
-    origin: true,
-    credentials: true,
+    origin: (origin, cb) => {
+      if (!isCorsOriginAllowed(origin, env)) {
+        cb(null, false);
+        return;
+      }
+      if (origin === undefined || origin.length === 0) {
+        cb(null, true);
+        return;
+      }
+      cb(null, origin);
+    },
+    credentials: false,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
-
-  const supabasePublic =
-    env.SUPABASE_URL && env.SUPABASE_ANON_KEY
-      ? createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        })
-      : null;
 
   const supabaseAdmin =
     env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
@@ -39,32 +74,18 @@ export function buildServer() {
         })
       : null;
 
-  registerAuthRoutes(app, { supabasePublic, supabaseAdmin });
+  registerAuthRoutes(app, { supabaseAdmin });
   registerInterestsRoutes(app, { supabaseAdmin });
+  registerProfileRoutes(app, { supabaseAdmin });
 
   app.get('/health', async () => {
     return { ok: true };
   });
 
   app.get('/me', async (req, reply) => {
-    if (!supabaseAdmin) {
-      return reply.status(501).send({
-        error:
-          'Supabase admin auth is not configured (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)',
-      });
-    }
-
-    const token = getBearerToken(req);
-    if (!token) {
-      return reply.status(401).send({ error: 'Missing bearer token' });
-    }
-
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data.user) {
-      return reply.status(401).send({ error: 'Invalid token' });
-    }
-
-    return { user: data.user };
+    const user = await requireAuthenticatedUser(req, reply, supabaseAdmin);
+    if (!user) return;
+    return { user };
   });
 
   return app;
