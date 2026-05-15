@@ -2,7 +2,7 @@
 
 import { apiGet, apiJson } from '@/lib/api';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 type ProfilePayload = {
   supabaseUserId: string;
@@ -126,7 +126,13 @@ export default function ProfilePage() {
   const lastSavedState = useRef<string>('');
   const lastFailedState = useRef<string>('');
 
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
+  const getSupabase = useCallback(() => {
+    if (!supabaseRef.current) {
+      supabaseRef.current = getSupabaseBrowserClient();
+    }
+    return supabaseRef.current;
+  }, []);
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   const signedInAs = profile?.email ?? profile?.supabaseUserId ?? '';
@@ -176,7 +182,7 @@ export default function ProfilePage() {
 
       try {
         const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession();
+          await getSupabase().auth.getSession();
         if (sessionError) throw new Error(sessionError.message);
         if (!sessionData.session) {
           if (!cancelled) {
@@ -258,7 +264,7 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [getSupabase]);
 
   async function saveProfile() {
     setError(null);
@@ -286,7 +292,7 @@ export default function ProfilePage() {
 
     setSaving(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await getSupabase().auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('Not signed in');
 
@@ -322,7 +328,7 @@ export default function ProfilePage() {
       setUsername(updated.username ?? '');
       setDisplayName(updated.displayName ?? '');
 
-      await supabase.auth.refreshSession();
+      await getSupabase().auth.refreshSession();
 
       setInfo('Saved');
     } catch (e) {
@@ -506,7 +512,7 @@ export default function ProfilePage() {
               type="button"
               className="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
               onClick={() => {
-                supabase.auth.signOut().finally(() => {
+                getSupabase().auth.signOut().finally(() => {
                   window.location.href = '/auth';
                 });
               }}

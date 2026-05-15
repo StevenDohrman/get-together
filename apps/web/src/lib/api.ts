@@ -43,7 +43,6 @@ export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(getApiUrl(path), {
     method: 'GET',
     headers,
-    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -68,7 +67,6 @@ export async function apiJson<T>(
   const response = await fetch(getApiUrl(path), {
     method,
     headers,
-    credentials: 'include',
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 

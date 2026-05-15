@@ -66,7 +66,7 @@ async function resolveAuthedUser(supabaseAdmin: SupabaseClient, req: FastifyRequ
 
   const { data: userByEmail, error: userByEmailError } = await supabaseAdmin
     .from('User')
-    .select('id,email,displayName')
+    .select('id,email,displayName,supabase_auth_id')
     .eq('email', email)
     .maybeSingle();
 
@@ -75,7 +75,54 @@ async function resolveAuthedUser(supabaseAdmin: SupabaseClient, req: FastifyRequ
   }
 
   if (userByEmail) {
-    return { user: userByEmail } as const;
+    const linkedId = userByEmail.supabase_auth_id as string | null;
+    if (linkedId != null && linkedId !== data.user.id) {
+      return { error: 'Invalid token' } as const;
+    }
+    if (linkedId == null) {
+      const { data: linked, error: linkError } = await supabaseAdmin
+        .from('User')
+        .update({
+          supabase_auth_id: data.user.id,
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', userByEmail.id)
+        .is('supabase_auth_id', null)
+        .select('id,email,displayName')
+        .maybeSingle();
+
+      if (linkError) {
+        return { error: linkError.message } as const;
+      }
+      if (linked) {
+        return { user: linked } as const;
+      }
+      const { data: afterRace, error: afterRaceError } = await supabaseAdmin
+        .from('User')
+        .select('id,email,displayName,supabase_auth_id')
+        .eq('email', email)
+        .maybeSingle();
+      if (afterRaceError || !afterRace) {
+        return { error: afterRaceError?.message ?? 'Failed to resolve app user' } as const;
+      }
+      if (afterRace.supabase_auth_id !== data.user.id) {
+        return { error: 'Invalid token' } as const;
+      }
+      return {
+        user: {
+          id: afterRace.id,
+          email: afterRace.email,
+          displayName: afterRace.displayName,
+        },
+      } as const;
+    }
+    return {
+      user: {
+        id: userByEmail.id,
+        email: userByEmail.email,
+        displayName: userByEmail.displayName,
+      },
+    } as const;
   }
 
   const { data: appUser, error: createError } = await supabaseAdmin
