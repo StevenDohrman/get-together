@@ -6,6 +6,8 @@ import { getEnv, type Env } from './env.js';
 import { registerInterestsRoutes } from './routes/interests.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerProfileRoutes } from './routes/profile.js';
+import { registerMatchingRoutes } from './routes/matching.js';
+import { registerGroupsRoutes } from './routes/groups.js';
 
 function parseCorsOriginList(raw: string | undefined): Set<string> {
   const trimmed = raw?.trim();
@@ -77,6 +79,8 @@ export function buildServer() {
   registerAuthRoutes(app, { supabaseAdmin });
   registerInterestsRoutes(app, { supabaseAdmin });
   registerProfileRoutes(app, { supabaseAdmin });
+  registerMatchingRoutes(app, { supabaseAdmin });
+  registerGroupsRoutes(app, { supabaseAdmin });
 
   app.get('/health', async () => {
     return { ok: true };

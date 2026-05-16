@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient, User as AuthUser } from '@supabase/supabase-js';
-import { prisma } from '@uconnect/db';
+import { prismaClient as prisma } from '../db.js';
 import { z } from 'zod';
 import { requireAuthenticatedUser } from '../auth.js';
 
@@ -31,7 +31,7 @@ export type ProfileRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
 };
 
-async function resolveAppUser(authUser: AuthUser) {
+export async function resolveAppUser(authUser: AuthUser) {
   const sub = authUser.id;
   const email = authUser.email?.trim() ?? '';
 
