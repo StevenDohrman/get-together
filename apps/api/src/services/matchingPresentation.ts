@@ -40,7 +40,7 @@ export type FormationProposalCardDto = {
     id: string;
     status: GroupFormationStatus;
     formedGroupId: string | null;
-    anchorUserId: string;
+    seedUserId: string;
     targetGroupSize: number;
     groupInterests: { id: string; slug: string; name: string }[];
     members: {
@@ -57,7 +57,7 @@ function proposalPayload(p: ProposalRow): FormationProposalCardDto['proposal'] {
     id: p.id,
     status: p.status,
     formedGroupId: p.formedGroupId,
-    anchorUserId: p.anchorUserId,
+    seedUserId: p.userGroupSeeking.userId,
     targetGroupSize: p.userGroupSeeking.targetGroupSize,
     groupInterests: p.userGroupSeeking.interests.map(i => i.interest),
     members: p.invites.map(m => ({
@@ -131,7 +131,7 @@ export async function listMyFormationInviteCards(appUserId: string): Promise<For
 }
 
 export async function loadMatchingDashboard(appUserId: string) {
-  const [groupSeekings, openInvites, leadingOpen] = await Promise.all([
+  const [groupSeekings, openInvites, openFromMySeekings] = await Promise.all([
     listSerializedGroupSeekings(appUserId),
     prisma.groupFormationInvite.findMany({
       where: {
@@ -143,7 +143,7 @@ export async function loadMatchingDashboard(appUserId: string) {
     }),
     prisma.groupFormationProposal.findMany({
       where: {
-        anchorUserId: appUserId,
+        userGroupSeeking: { is: { userId: appUserId } },
         status: GroupFormationStatus.OPEN,
       },
       orderBy: { createdAt: 'desc' },
@@ -159,16 +159,16 @@ export async function loadMatchingDashboard(appUserId: string) {
     .filter(
       inv =>
         inv.status === FormationInviteStatus.ACCEPTED &&
-        inv.proposal.anchorUserId !== appUserId,
+        inv.proposal.userGroupSeeking.userId !== appUserId,
     )
     .map(inv => formationCardFromInvite(inv));
 
-  const openFormationsImLeading = leadingOpen.map(p => formationCardFromProposalForUser(p, appUserId));
+  const openFormationsFromMySeekings = openFromMySeekings.map(p => formationCardFromProposalForUser(p, appUserId));
 
   return {
     groupSeekings,
     invitesPendingMyAnswer,
-    openFormationsImLeading,
+    openFormationsFromMySeekings,
     openFormationsWaitingOnOthers,
   };
 }

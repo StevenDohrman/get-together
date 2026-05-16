@@ -4,125 +4,82 @@ import {
   FormationInviteStatus,
   GroupFormationStatus,
   GroupRole,
+  GroupSource,
   SwipeDecision,
 } from '@prisma/client';
+import { getMutualYesUserIds } from './matchingDiscovery.js';
+import { normalizedWeightedOverlap, weightedVectorForInterestIds } from './matchingScoring.js';
 
 export const MAX_GROUP_SEEKINGS_PER_USER = 10;
 
-export async function getDiscoveryUsers(appUserId: string, limit: number) {
-  const myRows = await prisma.userInterest.findMany({
-    where: { userId: appUserId },
-    select: { interestId: true },
-  });
-  const myInterestIds = myRows.map(r => r.interestId);
-  if (myInterestIds.length === 0) {
-    return [];
-  }
+type GroupFormationCandidate = {
+  userId: string;
+  matchScore: number;
+  rawMatchScore: number;
+  sharedInterestCount: number;
+};
 
-  const swiped = await prisma.userSwipe.findMany({
-    where: { swiperId: appUserId },
-    select: { targetUserId: true },
-  });
-  const excludeIds = new Set<string>([appUserId]);
-  for (const s of swiped) {
-    excludeIds.add(s.targetUserId);
-  }
-
-  const others = await prisma.userInterest.findMany({
-    where: {
-      interestId: { in: myInterestIds },
-      userId: { notIn: [...excludeIds] },
-    },
-    select: { userId: true, interestId: true },
-  });
-
-  const overlap = new Map<string, Set<string>>();
-  for (const row of others) {
-    if (!overlap.has(row.userId)) overlap.set(row.userId, new Set());
-    overlap.get(row.userId)!.add(row.interestId);
-  }
-
-  const ranked = [...overlap.entries()]
-    .map(([userId, set]) => ({ userId, sharedInterestCount: set.size }))
-    .sort(
-      (a, b) =>
-        b.sharedInterestCount - a.sharedInterestCount || a.userId.localeCompare(b.userId),
-    );
-
-  const slice = ranked.slice(0, limit);
-  if (slice.length === 0) return [];
-
-  const users = await prisma.user.findMany({
-    where: { id: { in: slice.map(s => s.userId) } },
-    select: { id: true, username: true, displayName: true },
-  });
-  const byId = new Map(users.map(u => [u.id, u]));
-  return slice.map(s => {
-    const u = byId.get(s.userId);
-    return {
-      id: s.userId,
-      username: u?.username ?? null,
-      displayName: u?.displayName ?? null,
-      sharedInterestCount: s.sharedInterestCount,
-    };
-  });
+function yesKey(swiperId: string, targetUserId: string): string {
+  return `${swiperId}:${targetUserId}`;
 }
 
-export async function usersShareProfileInterest(userIdA: string, userIdB: string): Promise<boolean> {
-  const bInterests = await prisma.userInterest.findMany({
-    where: { userId: userIdB },
-    select: { interestId: true },
-  });
-  if (bInterests.length === 0) return false;
-  const shared = await prisma.userInterest.findFirst({
+async function getYesSwipeSet(userIds: string[]): Promise<Set<string>> {
+  const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length < 2) return new Set();
+
+  const swipes = await prisma.userSwipe.findMany({
     where: {
-      userId: userIdA,
-      interestId: { in: bInterests.map(r => r.interestId) },
+      swiperId: { in: uniqueIds },
+      targetUserId: { in: uniqueIds },
+      decision: SwipeDecision.YES,
     },
+    select: { swiperId: true, targetUserId: true },
   });
-  return shared != null;
+
+  return new Set(swipes.map(s => yesKey(s.swiperId, s.targetUserId)));
 }
 
-export async function upsertSwipe(swiperId: string, targetUserId: string, decision: SwipeDecision) {
-  if (swiperId === targetUserId) {
-    return { ok: false as const, error: 'Cannot swipe on yourself' };
+function hasPairwiseMutualYes(userIds: string[], yesSwipes: Set<string>): boolean {
+  for (let i = 0; i < userIds.length; i += 1) {
+    for (let j = i + 1; j < userIds.length; j += 1) {
+      const a = userIds[i];
+      const b = userIds[j];
+      if (a === undefined || b === undefined) return false;
+      if (!yesSwipes.has(yesKey(a, b)) || !yesSwipes.has(yesKey(b, a))) {
+        return false;
+      }
+    }
   }
-  const share = await usersShareProfileInterest(swiperId, targetUserId);
-  if (!share) {
-    return {
-      ok: false as const,
-      error: 'You can only swipe on users you share at least one profile interest with',
-    };
-  }
-  await prisma.userSwipe.upsert({
-    where: {
-      swiperId_targetUserId: { swiperId, targetUserId },
-    },
-    create: { swiperId, targetUserId, decision },
-    update: { decision },
-  });
-  return { ok: true as const };
+  return true;
 }
 
-export async function getMutualYesUserIds(anchorId: string): Promise<string[]> {
-  const outYes = await prisma.userSwipe.findMany({
-    where: { swiperId: anchorId, decision: SwipeDecision.YES },
-    select: { targetUserId: true },
-  });
-  const ids = outYes.map(x => x.targetUserId);
-  if (ids.length === 0) return [];
-  const back = await prisma.userSwipe.findMany({
-    where: { swiperId: { in: ids }, targetUserId: anchorId, decision: SwipeDecision.YES },
-    select: { swiperId: true },
-  });
-  return back.map(b => b.swiperId);
+async function selectPairwiseMutualCandidates(
+  requiredUserIds: string[],
+  rankedCandidates: GroupFormationCandidate[],
+  slotsToFill: number,
+): Promise<string[]> {
+  const yesSwipes = await getYesSwipeSet([
+    ...requiredUserIds,
+    ...rankedCandidates.map(candidate => candidate.userId),
+  ]);
+  const selected: string[] = [];
+
+  for (const candidate of rankedCandidates) {
+    const nextGroup = [...requiredUserIds, ...selected, candidate.userId];
+    if (!hasPairwiseMutualYes(nextGroup, yesSwipes)) continue;
+    selected.push(candidate.userId);
+    if (selected.length === slotsToFill) break;
+  }
+
+  return selected;
 }
 
 async function compatibleCandidates(
+  seedUserId: string,
   seekingInterestIds: Set<string>,
   targetGroupSize: number,
   mutualIds: string[],
-): Promise<{ userId: string; score: number }[]> {
+): Promise<GroupFormationCandidate[]> {
   if (mutualIds.length === 0) return [];
   const seekings = await prisma.userGroupSeeking.findMany({
     where: {
@@ -132,7 +89,30 @@ async function compatibleCandidates(
     include: { interests: { select: { interestId: true } } },
   });
 
-  const candidates: { userId: string; score: number }[] = [];
+  const allRelevantInterestIds = new Set<string>(seekingInterestIds);
+  for (const seeking of seekings) {
+    for (const interest of seeking.interests) allRelevantInterestIds.add(interest.interestId);
+  }
+
+  const profileWeights = await prisma.userInterest.findMany({
+    where: {
+      userId: { in: [seedUserId, ...mutualIds] },
+      interestId: { in: [...allRelevantInterestIds] },
+    },
+    select: { userId: true, interestId: true, weight: true },
+  });
+  const weightsByUserId = new Map<string, Map<string, number>>();
+  for (const row of profileWeights) {
+    if (!weightsByUserId.has(row.userId)) weightsByUserId.set(row.userId, new Map());
+    weightsByUserId.get(row.userId)!.set(row.interestId, row.weight);
+  }
+
+  const seedVector = weightedVectorForInterestIds(
+    [...seekingInterestIds],
+    weightsByUserId.get(seedUserId) ?? new Map(),
+  );
+
+  const candidates: GroupFormationCandidate[] = [];
   const byUser = new Map<string, (typeof seekings)[number][]>();
   for (const s of seekings) {
     if (!byUser.has(s.userId)) byUser.set(s.userId, []);
@@ -141,26 +121,36 @@ async function compatibleCandidates(
 
   for (const uid of mutualIds) {
     const list = byUser.get(uid) ?? [];
-    let best = 0;
+    let best = { sharedInterestCount: 0, rawMatchScore: 0, matchScore: 0 };
     for (const s of list) {
-      let inter = 0;
-      for (const iid of s.interests) {
-        if (seekingInterestIds.has(iid.interestId)) inter += 1;
+      const candidateVector = weightedVectorForInterestIds(
+        s.interests.map(i => i.interestId),
+        weightsByUserId.get(uid) ?? new Map(),
+      );
+      const score = normalizedWeightedOverlap(seedVector, candidateVector);
+      if (
+        score.matchScore > best.matchScore ||
+        (score.matchScore === best.matchScore && score.sharedInterestCount > best.sharedInterestCount)
+      ) {
+        best = score;
       }
-      if (inter > best) best = inter;
     }
-    if (best > 0) candidates.push({ userId: uid, score: best });
+    if (best.sharedInterestCount > 0) candidates.push({ userId: uid, ...best });
   }
 
   candidates.sort(
-    (a, b) => b.score - a.score || a.userId.localeCompare(b.userId),
+    (a, b) =>
+      b.matchScore - a.matchScore ||
+      b.sharedInterestCount - a.sharedInterestCount ||
+      b.rawMatchScore - a.rawMatchScore ||
+      a.userId.localeCompare(b.userId),
   );
   return candidates;
 }
 
-export async function tryCreateFormationProposal(anchorUserId: string, userGroupSeekingId: string) {
+export async function tryCreateFormationProposal(seedUserId: string, userGroupSeekingId: string) {
   const seeking = await prisma.userGroupSeeking.findFirst({
-    where: { id: userGroupSeekingId, userId: anchorUserId },
+    where: { id: userGroupSeekingId, userId: seedUserId },
     include: { interests: true },
   });
   if (!seeking) {
@@ -184,23 +174,21 @@ export async function tryCreateFormationProposal(anchorUserId: string, userGroup
   }
 
   const interestSet = new Set(seeking.interests.map(i => i.interestId));
-  const mutual = await getMutualYesUserIds(anchorUserId);
-  const ranked = await compatibleCandidates(interestSet, seeking.targetGroupSize, mutual);
+  const mutual = await getMutualYesUserIds(seedUserId);
+  const ranked = await compatibleCandidates(seedUserId, interestSet, seeking.targetGroupSize, mutual);
   const needed = seeking.targetGroupSize - 1;
-  if (ranked.length < needed) {
+  const chosen = await selectPairwiseMutualCandidates([seedUserId], ranked, needed);
+  if (chosen.length < needed) {
     return {
       ok: false as const,
       error:
-        'Not enough people yet: need mutual yes swipes with at least one overlapping group-seeking interest and the same target group size.',
+        'Not enough people yet: every proposed group member must mutually swipe yes on every other member and share compatible group-seeking interests.',
     };
   }
-
-  const chosen = ranked.slice(0, needed).map(r => r.userId);
 
   const proposal = await prisma.$transaction(async tx => {
     const prop = await tx.groupFormationProposal.create({
       data: {
-        anchorUserId,
         userGroupSeekingId,
         status: GroupFormationStatus.OPEN,
       },
@@ -208,7 +196,7 @@ export async function tryCreateFormationProposal(anchorUserId: string, userGroup
     await tx.groupFormationInvite.create({
       data: {
         proposalId: prop.id,
-        userId: anchorUserId,
+        userId: seedUserId,
         status: FormationInviteStatus.ACCEPTED,
       },
     });
@@ -226,6 +214,42 @@ export async function tryCreateFormationProposal(anchorUserId: string, userGroup
 
   await maybeFulfillProposal(proposal.id);
   return { ok: true as const, proposalId: proposal.id, reused: false as const };
+}
+
+export async function tryCreateFormationProposalsForUser(userId: string) {
+  const seekings = await prisma.userGroupSeeking.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+
+  const results = [];
+  for (const seeking of seekings) {
+    try {
+      results.push({
+        userGroupSeekingId: seeking.id,
+        ...(await tryCreateFormationProposal(userId, seeking.id)),
+      });
+    } catch (error) {
+      results.push({
+        userGroupSeekingId: seeking.id,
+        ok: false as const,
+        error: error instanceof Error ? error.message : 'Failed to run group formation',
+      });
+    }
+  }
+  return results;
+}
+
+export async function tryCreateFormationProposalsForUsers(userIds: string[]) {
+  const uniqueUserIds = [...new Set(userIds)];
+  const results = [];
+  for (const userId of uniqueUserIds) {
+    results.push({
+      userId,
+      results: await tryCreateFormationProposalsForUser(userId),
+    });
+  }
+  return results;
 }
 
 async function maybeFulfillProposal(proposalId: string) {
@@ -267,7 +291,7 @@ async function maybeFulfillProposal(proposalId: string) {
         slug,
         name,
         description: 'Formed from mutual matches',
-        createdById: proposal.anchorUserId,
+        source: GroupSource.APP_FORMED,
         interests: {
           create: proposal.userGroupSeeking.interests.map(ui => ({
             interestId: ui.interestId,
@@ -277,7 +301,7 @@ async function maybeFulfillProposal(proposalId: string) {
         members: {
           create: accepted.map(inv => ({
             userId: inv.userId,
-            role: inv.userId === proposal.anchorUserId ? GroupRole.OWNER : GroupRole.MEMBER,
+            role: GroupRole.MEMBER,
           })),
         },
       },
@@ -343,31 +367,39 @@ async function tryAddReplacementInvite(proposalId: string) {
   }
 
   const target = proposal.userGroupSeeking.targetGroupSize;
-  const accepted = proposal.invites.filter(i => i.status === FormationInviteStatus.ACCEPTED).length;
-  const pending = proposal.invites.filter(i => i.status === FormationInviteStatus.PENDING).length;
-  if (accepted + pending >= target) {
+  const activeInvites = proposal.invites.filter(
+    i => i.status === FormationInviteStatus.ACCEPTED || i.status === FormationInviteStatus.PENDING,
+  );
+  if (activeInvites.length >= target) {
     return { ok: false as const, error: 'No slot to fill' };
   }
 
   const usedIds = new Set(proposal.invites.map(i => i.userId));
-  const mutual = (await getMutualYesUserIds(proposal.anchorUserId)).filter(id => !usedIds.has(id));
+  const seedUserId = proposal.userGroupSeeking.userId;
+  const mutual = (await getMutualYesUserIds(seedUserId)).filter(id => !usedIds.has(id));
   const interestSet = new Set(proposal.userGroupSeeking.interests.map(i => i.interestId));
   const ranked = await compatibleCandidates(
+    seedUserId,
     interestSet,
     proposal.userGroupSeeking.targetGroupSize,
     mutual,
   );
-  const next = ranked.find(r => !usedIds.has(r.userId));
-  if (!next) {
+  const replacement = await selectPairwiseMutualCandidates(
+    activeInvites.map(i => i.userId),
+    ranked.filter(r => !usedIds.has(r.userId)),
+    1,
+  );
+  const nextUserId = replacement[0];
+  if (!nextUserId) {
     return { ok: false as const, error: 'No replacement candidates' };
   }
 
   await prisma.groupFormationInvite.create({
     data: {
       proposalId,
-      userId: next.userId,
+      userId: nextUserId,
       status: FormationInviteStatus.PENDING,
     },
   });
-  return { ok: true as const, userId: next.userId };
+  return { ok: true as const, userId: nextUserId };
 }

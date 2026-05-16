@@ -31,7 +31,7 @@ type DbUser = {
 type State = {
   users: DbUser[];
   interests: { id: string; slug: string; name: string }[];
-  userInterests: { userId: string; interestId: string }[];
+  userInterests: { userId: string; interestId: string; weight?: number }[];
   swipes: { swiperId: string; targetUserId: string; decision: SwipeDecision }[];
   groupSeekings: {
     id: string;
@@ -43,7 +43,6 @@ type State = {
   }[];
   formationProposals: {
     id: string;
-    anchorUserId: string;
     userGroupSeekingId: string;
     status: GroupFormationStatus;
     formedGroupId: string | null;
@@ -176,7 +175,13 @@ function matchesWhere<T extends Record<string, unknown>>(row: T, where: Record<s
     if (key === 'id' && typeof value === 'string' && row.id !== value) return false;
     if (key === 'userId' && typeof value === 'string' && row.userId !== value) return false;
     if (key === 'swiperId' && typeof value === 'string' && row.swiperId !== value) return false;
+    if (key === 'swiperId' && typeof value === 'object' && value && 'in' in value) {
+      if (!(value.in as string[]).includes(String(row.swiperId))) return false;
+    }
     if (key === 'targetUserId' && typeof value === 'string' && row.targetUserId !== value) return false;
+    if (key === 'targetUserId' && typeof value === 'object' && value && 'in' in value) {
+      if (!(value.in as string[]).includes(String(row.targetUserId))) return false;
+    }
     if (key === 'decision' && typeof value === 'string' && row.decision !== value) return false;
     if (key === 'status' && typeof value === 'string' && row.status !== value) return false;
     if (key === 'proposalId' && typeof value === 'string' && row.proposalId !== value) return false;
@@ -206,27 +211,31 @@ const prisma = {
   },
   userInterest: {
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
-      state.userInterests.filter(row => {
-        if (typeof where.userId === 'string' && row.userId !== where.userId) return false;
-        if (where.interestId && typeof where.interestId === 'object' && 'in' in where.interestId) {
-          if (!(where.interestId.in as string[]).includes(row.interestId)) return false;
-        }
-        if (where.userId && typeof where.userId === 'object' && 'notIn' in where.userId) {
-          if ((where.userId.notIn as string[]).includes(row.userId)) return false;
-        }
-        return true;
-      }),
+      state.userInterests
+        .filter(row => {
+          if (typeof where.userId === 'string' && row.userId !== where.userId) return false;
+          if (where.interestId && typeof where.interestId === 'object' && 'in' in where.interestId) {
+            if (!(where.interestId.in as string[]).includes(row.interestId)) return false;
+          }
+          if (where.userId && typeof where.userId === 'object' && 'notIn' in where.userId) {
+            if ((where.userId.notIn as string[]).includes(row.userId)) return false;
+          }
+          if (where.userId && typeof where.userId === 'object' && 'in' in where.userId) {
+            if (!(where.userId.in as string[]).includes(row.userId)) return false;
+          }
+          return true;
+        })
+        .map(row => ({ ...row, weight: row.weight ?? 5 })),
     findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-      state.userInterests.find(row => matchesWhere(row, where)) ?? null,
+      {
+        const row = state.userInterests.find(candidate => matchesWhere(candidate, where));
+        return row ? { ...row, weight: row.weight ?? 5 } : null;
+      },
   },
   userSwipe: {
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
       state.swipes.filter(row => {
-        if (!matchesWhere(row, where)) return false;
-        if (where.swiperId && typeof where.swiperId === 'object' && 'in' in where.swiperId) {
-          return (where.swiperId.in as string[]).includes(row.swiperId);
-        }
-        return true;
+        return matchesWhere(row, where);
       }),
     upsert: async (args: {
       where: { swiperId_targetUserId: { swiperId: string; targetUserId: string } };
@@ -307,11 +316,14 @@ const prisma = {
   groupFormationProposal: {
     findFirst: async ({ where }: { where: Record<string, unknown> }) =>
       state.formationProposals.find(row => matchesWhere(row, where)) ?? null,
-    create: async ({ data }: { data: { anchorUserId: string; userGroupSeekingId: string; status: GroupFormationStatus } }) => {
+    create: async ({ data }: { data: { userGroupSeekingId: string; status: GroupFormationStatus } }) => {
       state.calls.proposalCreates.push(data);
+      const proposalNumber = state.formationProposals.length + 1;
       const row = {
-        id: PROPOSAL_ID,
-        anchorUserId: data.anchorUserId,
+        id:
+          proposalNumber === 1
+            ? PROPOSAL_ID
+            : `30000000-0000-4000-8000-${String(proposalNumber).padStart(12, '0')}`,
         userGroupSeekingId: data.userGroupSeekingId,
         status: data.status,
         formedGroupId: null,
@@ -333,7 +345,17 @@ const prisma = {
       return row;
     },
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
-      state.formationProposals.filter(row => matchesWhere(row, where)).map(proposalWithIncludes),
+      state.formationProposals
+        .filter(row => {
+          if (!matchesWhere(row, where)) return false;
+          if (where.userGroupSeeking && typeof where.userGroupSeeking === 'object' && 'is' in where.userGroupSeeking) {
+            const seeking = state.groupSeekings.find(s => s.id === row.userGroupSeekingId);
+            const relationFilter = where.userGroupSeeking.is as { userId?: string };
+            if (relationFilter.userId !== undefined && seeking?.userId !== relationFilter.userId) return false;
+          }
+          return true;
+        })
+        .map(proposalWithIncludes),
   },
   groupFormationInvite: {
     create: async ({ data }: { data: { proposalId: string; userId: string; status: FormationInviteStatus } }) => {
@@ -455,17 +477,18 @@ beforeEach(() => {
 });
 
 describe('matching APIs', () => {
-  it('returns only unswiped discovery users with shared profile interests ranked by overlap', async () => {
+  it('returns only unswiped discovery users ranked by normalized shared-interest weights', async () => {
     state.userInterests.push(
-      { userId: ME, interestId: INTEREST_A },
-      { userId: ME, interestId: INTEREST_B },
-      { userId: USER_A, interestId: INTEREST_A },
-      { userId: USER_B, interestId: INTEREST_A },
-      { userId: USER_B, interestId: INTEREST_B },
-      { userId: USER_C, interestId: INTEREST_B },
-      { userId: USER_D, interestId: INTEREST_C },
+      { userId: ME, interestId: INTEREST_A, weight: 3 },
+      { userId: ME, interestId: INTEREST_B, weight: 4 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 10 },
+      { userId: USER_B, interestId: INTEREST_A, weight: 9 },
+      { userId: USER_B, interestId: INTEREST_B, weight: 10 },
+      { userId: USER_C, interestId: INTEREST_B, weight: 10 },
+      { userId: USER_C, interestId: INTEREST_C, weight: 10 },
+      { userId: USER_D, interestId: INTEREST_C, weight: 10 },
     );
-    state.swipes.push({ swiperId: ME, targetUserId: USER_C, decision: SwipeDecision.NO });
+    state.swipes.push({ swiperId: ME, targetUserId: USER_D, decision: SwipeDecision.NO });
 
     const response = await makeApp().inject({
       method: 'GET',
@@ -475,10 +498,18 @@ describe('matching APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(
-      response.json().users.map((u: { id: string; sharedInterestCount: number }) => [u.id, u.sharedInterestCount]),
+      response
+        .json()
+        .users.map((u: { id: string; sharedInterestCount: number; matchScore: number; rawMatchScore: number }) => [
+          u.id,
+          u.sharedInterestCount,
+          Math.round(u.matchScore * 1000) / 1000,
+          u.rawMatchScore,
+        ]),
       [
-        [USER_B, 2],
-        [USER_A, 1],
+        [USER_B, 2, 0.996, 67],
+        [USER_A, 1, 0.6, 30],
+        [USER_C, 1, 0.566, 40],
       ],
     );
   });
@@ -543,7 +574,16 @@ describe('matching APIs', () => {
     assert.match(response.json().error, /at most 10/);
   });
 
-  it('creates a formation proposal from mutual yes swipes and compatible group seekings', async () => {
+  it('creates a formation proposal using weighted group-seeking compatibility', async () => {
+    state.groupSeekings[0].targetGroupSize = 2;
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 10 },
+      { userId: ME, interestId: INTEREST_B, weight: 1 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 1 },
+      { userId: USER_A, interestId: INTEREST_B, weight: 1 },
+      { userId: USER_B, interestId: INTEREST_A, weight: 10 },
+      { userId: USER_C, interestId: INTEREST_C, weight: 10 },
+    );
     state.swipes.push(
       { swiperId: ME, targetUserId: USER_A, decision: SwipeDecision.YES },
       { swiperId: USER_A, targetUserId: ME, decision: SwipeDecision.YES },
@@ -556,7 +596,7 @@ describe('matching APIs', () => {
       {
         id: '20000000-0000-4000-8000-000000000002',
         userId: USER_A,
-        targetGroupSize: 3,
+        targetGroupSize: 2,
         interestIds: [INTEREST_A, INTEREST_B],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -564,7 +604,7 @@ describe('matching APIs', () => {
       {
         id: '20000000-0000-4000-8000-000000000003',
         userId: USER_B,
-        targetGroupSize: 3,
+        targetGroupSize: 2,
         interestIds: [INTEREST_A],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -572,7 +612,7 @@ describe('matching APIs', () => {
       {
         id: '20000000-0000-4000-8000-000000000004',
         userId: USER_C,
-        targetGroupSize: 3,
+        targetGroupSize: 2,
         interestIds: [INTEREST_C],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -592,8 +632,85 @@ describe('matching APIs', () => {
       state.formationInvites.map(inv => [inv.userId, inv.status]),
       [
         [ME, FormationInviteStatus.ACCEPTED],
-        [USER_A, FormationInviteStatus.PENDING],
         [USER_B, FormationInviteStatus.PENDING],
+      ],
+    );
+  });
+
+  it('does not offer a group unless every proposed member mutually swiped yes on every other member', async () => {
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 10 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 10 },
+      { userId: USER_B, interestId: INTEREST_A, weight: 10 },
+    );
+    state.swipes.push(
+      { swiperId: ME, targetUserId: USER_A, decision: SwipeDecision.YES },
+      { swiperId: USER_A, targetUserId: ME, decision: SwipeDecision.YES },
+      { swiperId: ME, targetUserId: USER_B, decision: SwipeDecision.YES },
+      { swiperId: USER_B, targetUserId: ME, decision: SwipeDecision.YES },
+    );
+    state.groupSeekings.push(
+      {
+        id: '20000000-0000-4000-8000-000000000002',
+        userId: USER_A,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '20000000-0000-4000-8000-000000000003',
+        userId: USER_B,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/matching/formation/run',
+      headers: authHeaders(),
+      payload: { userGroupSeekingId: SEEKING_ID },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /every proposed group member/);
+    assert.equal(state.formationProposals.length, 0);
+  });
+
+  it('runs group formation checks after a yes swipe', async () => {
+    state.groupSeekings[0].targetGroupSize = 2;
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 10 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 10 },
+    );
+    state.swipes.push({ swiperId: USER_A, targetUserId: ME, decision: SwipeDecision.YES });
+    state.groupSeekings.push({
+      id: '20000000-0000-4000-8000-000000000002',
+      userId: USER_A,
+      targetGroupSize: 2,
+      interestIds: [INTEREST_A],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/matching/swipes',
+      headers: authHeaders(),
+      payload: { targetUserId: USER_A, decision: SwipeDecision.YES },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().ok, true);
+    assert.equal(state.formationProposals.length, 2);
+    assert.deepEqual(
+      state.formationInvites.slice(0, 2).map(inv => [inv.userId, inv.status]),
+      [
+        [ME, FormationInviteStatus.ACCEPTED],
+        [USER_A, FormationInviteStatus.PENDING],
       ],
     );
   });
@@ -601,7 +718,6 @@ describe('matching APIs', () => {
   it('accepting the last pending invite fulfills the proposal and creates a real group', async () => {
     state.formationProposals.push({
       id: PROPOSAL_ID,
-      anchorUserId: USER_A,
       userGroupSeekingId: SEEKING_ID,
       status: GroupFormationStatus.OPEN,
       formedGroupId: null,
@@ -651,7 +767,6 @@ describe('matching APIs', () => {
   it('returns dashboard sections for seekings and pending formations', async () => {
     state.formationProposals.push({
       id: PROPOSAL_ID,
-      anchorUserId: USER_A,
       userGroupSeekingId: SEEKING_ID,
       status: GroupFormationStatus.OPEN,
       formedGroupId: null,

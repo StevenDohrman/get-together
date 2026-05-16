@@ -21,6 +21,11 @@ enum GroupRole {
   MEMBER
 }
 
+enum GroupSource {
+  USER_CREATED
+  APP_FORMED
+}
+
 enum SwipeDecision {
   YES
   NO
@@ -104,8 +109,7 @@ model User {
 
   groupSeekings UserGroupSeeking[]
 
-  formationProposalsAnchored GroupFormationProposal[] @relation("FormationAnchor")
-  formationInvites           GroupFormationInvite[]
+  formationInvites GroupFormationInvite[]
 
   createdGroups    Group[]         @relation("GroupCreatedBy")
   groupMemberships GroupMember[]
@@ -119,8 +123,10 @@ model Group {
   name        String
   description String?
 
-  createdBy   User     @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdById String   @db.Uuid
+  /// Nullable because matched groups are created by the app, not by a user.
+  createdBy   User?  @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String? @db.Uuid
+  source      GroupSource @default(USER_CREATED)
 
   members   GroupMember[]
   interests GroupInterest[]
@@ -194,9 +200,6 @@ model UserGroupSeekingInterest {
 model GroupFormationProposal {
   id String @id @default(uuid()) @db.Uuid
 
-  anchorUserId String @db.Uuid
-  anchorUser   User   @relation("FormationAnchor", fields: [anchorUserId], references: [id], onDelete: Cascade)
-
   userGroupSeekingId String           @db.Uuid
   userGroupSeeking   UserGroupSeeking @relation(fields: [userGroupSeekingId], references: [id], onDelete: Cascade)
 
@@ -210,7 +213,6 @@ model GroupFormationProposal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([anchorUserId])
   @@index([status])
 }
 

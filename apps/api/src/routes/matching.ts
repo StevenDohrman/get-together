@@ -13,11 +13,11 @@ import {
 } from '../services/matchingPresentation.js';
 import {
   MAX_GROUP_SEEKINGS_PER_USER,
-  getDiscoveryUsers,
   respondFormationInvite,
   tryCreateFormationProposal,
-  upsertSwipe,
+  tryCreateFormationProposalsForUsers,
 } from '../services/groupFormation.js';
+import { getDiscoveryUsers, upsertSwipe } from '../services/matchingDiscovery.js';
 
 export type MatchingRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
@@ -102,7 +102,12 @@ export function registerMatchingRoutes(app: FastifyInstance, deps: MatchingRoute
     if (!result.ok) {
       return reply.status(400).send({ error: result.error });
     }
-    return reply.send({ ok: true });
+    const formationResults =
+      parsed.data.decision === SwipeDecision.YES
+        ? await tryCreateFormationProposalsForUsers([row.id, parsed.data.targetUserId])
+        : [];
+
+    return reply.send({ ok: true, formationResults });
   });
 
   app.get('/me/group-seekings', async (req, reply) => {
