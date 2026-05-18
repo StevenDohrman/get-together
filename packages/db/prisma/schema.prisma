@@ -78,8 +78,8 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  interests UserInterest[]
-  userLocations UserLocation[]
+  interests    UserInterest[]
+  userLocation UserLocation?
 
   createdGroups    Group[]         @relation("GroupCreatedBy")
   groupMemberships GroupMember[]
