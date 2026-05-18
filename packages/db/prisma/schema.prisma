@@ -21,6 +21,29 @@ enum GroupRole {
   MEMBER
 }
 
+enum GroupSource {
+  USER_CREATED
+  APP_FORMED
+}
+
+enum SwipeDecision {
+  YES
+  NO
+}
+
+enum GroupFormationStatus {
+  OPEN
+  FULFILLED
+  CANCELLED
+}
+
+enum FormationInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
 model Interest {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -35,6 +58,7 @@ model Interest {
 
   users  UserInterest[]
   groups GroupInterest[]
+  userGroupSeekingInterests UserGroupSeekingInterest[]
 
   embedding InterestEmbedding?
 }
@@ -80,6 +104,13 @@ model User {
 
   interests UserInterest[]
 
+  swipesInitiated UserSwipe[] @relation("SwipesInitiated")
+  swipesReceived  UserSwipe[] @relation("SwipesReceived")
+
+  groupSeekings UserGroupSeeking[]
+
+  formationInvites GroupFormationInvite[]
+
   createdGroups    Group[]         @relation("GroupCreatedBy")
   groupMemberships GroupMember[]
   createdEvents    Event[]         @relation("EventCreatedBy")
@@ -92,12 +123,16 @@ model Group {
   name        String
   description String?
 
-  createdBy   User     @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdById String   @db.Uuid
+  /// Nullable because matched groups are created by the app, not by a user.
+  createdBy   User?  @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String? @db.Uuid
+  source      GroupSource @default(USER_CREATED)
 
   members   GroupMember[]
   interests GroupInterest[]
   events    Event[]
+  formationOrigin GroupFormationProposal? @relation("FormationToGroup")
+
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
@@ -116,6 +151,88 @@ model UserInterest {
 
   @@id([userId, interestId])
   @@index([interestId])
+}
+
+/// A swipe on another user (yes/no). Used for mutual-match discovery separate from group-seeking interests.
+model UserSwipe {
+  swiper   User @relation("SwipesInitiated", fields: [swiperId], references: [id], onDelete: Cascade)
+  swiperId String @db.Uuid
+  target   User @relation("SwipesReceived", fields: [targetUserId], references: [id], onDelete: Cascade)
+  targetUserId String @db.Uuid
+
+  decision SwipeDecision
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([swiperId, targetUserId])
+  @@index([targetUserId])
+}
+
+/// A template for the kind of group this user wants to join or form (max 10 per user enforced in API).
+model UserGroupSeeking {
+  id     String @id @default(uuid()) @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+
+  /// Final headcount for the group, including this user.
+  targetGroupSize Int @db.SmallInt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  interests  UserGroupSeekingInterest[]
+  proposals  GroupFormationProposal[]
+
+  @@index([userId])
+}
+
+model UserGroupSeekingInterest {
+  userGroupSeeking   UserGroupSeeking @relation(fields: [userGroupSeekingId], references: [id], onDelete: Cascade)
+  userGroupSeekingId String           @db.Uuid
+  interest           Interest         @relation(fields: [interestId], references: [id], onDelete: Cascade)
+  interestId         String           @db.Uuid
+
+  @@id([userGroupSeekingId, interestId])
+  @@index([interestId])
+}
+
+/// A pending or completed offer to assemble a real Group from compatible mutual swipes + group seekings.
+model GroupFormationProposal {
+  id String @id @default(uuid()) @db.Uuid
+
+  userGroupSeekingId String           @db.Uuid
+  userGroupSeeking   UserGroupSeeking @relation(fields: [userGroupSeekingId], references: [id], onDelete: Cascade)
+
+  status GroupFormationStatus @default(OPEN)
+
+  formedGroupId String? @unique @db.Uuid
+  formedGroup   Group?  @relation("FormationToGroup", fields: [formedGroupId], references: [id], onDelete: SetNull)
+
+  invites GroupFormationInvite[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model GroupFormationInvite {
+  id String @id @default(uuid()) @db.Uuid
+
+  proposalId String                 @db.Uuid
+  proposal   GroupFormationProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status FormationInviteStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([proposalId, userId])
+  @@index([userId])
+  @@index([proposalId])
 }
 
 model GroupInterest {
