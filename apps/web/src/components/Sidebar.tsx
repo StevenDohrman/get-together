@@ -3,9 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Logo from './Logo';
+import { useProfile } from '@/lib/hooks/useProfile';
+import Loading from './Loading';
+import ErrorMessage from './ErrorMessage';
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const { profile, loading, error } = useProfile();
 
     const navItems = [
         { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -45,10 +49,18 @@ export default function Sidebar() {
             {/* User Profile */}
             <div className="border-t border-slate-800 pt-4 mt-4">
                 <div className="flex items-center gap-3 px-2">
-                    <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full"></div>
-                    <div>
-                        <p className="text-sm font-medium text-white">Amanda Carrington</p>
-                        <p className="text-xs text-slate-400">@amandacarrington</p>
+                    <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full" />
+                    <div className="flex-1">
+                        {loading ? (
+                            <Loading />
+                        ) : error ? (
+                            <ErrorMessage message={error} />
+                        ) : (
+                            <>
+                                <p className="text-sm font-medium text-white">{profile?.displayName ?? 'Your Name'}</p>
+                                <p className="text-xs text-slate-400">@{profile?.username ?? 'yourhandle'}</p>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

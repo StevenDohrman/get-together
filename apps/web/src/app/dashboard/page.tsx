@@ -1,5 +1,5 @@
 import DashboardLayout from '@/components/DashboardLayout';
-import DashboardHeader from '@/components/DashboardHeader';
+import DashboardHeaderClient from '@/components/DashboardHeaderClient';
 import ActivityItem from '@/components/ActivityItem';
 import CommunityCard from '@/components/CommunityCard';
 import EventCard, { type EventCardProps } from '@/components/EventCard';
@@ -136,11 +136,7 @@ export default function Dashboard() {
         <DashboardLayout>
             <div className="max-w-7xl mx-auto">
                 {/* Header and Stats */}
-                <DashboardHeader
-                    userName="Amanda"
-                    intro="Let's get you connected today."
-                    stats={dashboardStats}
-                />
+                <DashboardHeaderClient intro="Let's get you connected today." stats={dashboardStats} />
 
                 {/* Main Content Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
