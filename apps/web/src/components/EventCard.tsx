@@ -4,7 +4,7 @@ export interface EventCardProps {
     date: string;
     time: string;
     location?: string;
-    eventType: string;
+    eventType?: string;
     status?: 'You\'re going' | 'Interested' | 'Going';
     statusColor?: string;
 }
