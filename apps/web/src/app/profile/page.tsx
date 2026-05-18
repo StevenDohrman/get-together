@@ -3,6 +3,7 @@
 import { apiGet, apiJson } from '@/lib/api';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useInterests } from '@/lib/hooks/useInterests';
 
 type ProfilePayload = {
   supabaseUserId: string;
@@ -111,23 +112,25 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState('');
   const [locationName, setLocationName] = useState('');
   const [saving, setSaving] = useState(false);
-  const [catalog, setCatalog] = useState<Interest[]>([]);
-  const [selectedInterests, setSelectedInterests] = useState<
-    SelectedInterest[]
-  >([]);
-  const [interestsLoading, setInterestsLoading] = useState(false);
-  const [interestSaving, setInterestSaving] = useState(false);
+  const {
+    catalog,
+    selectedInterests,
+    loading: interestsLoading,
+    saving: interestSaving,
+    error: interestError,
+    info: interestInfo,
+    add: addInterest,
+    remove: removeInterest,
+    updateWeight: updateInterestWeight,
+    refetch: refetchInterests,
+  } = useInterests();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [interestError, setInterestError] = useState<string | null>(null);
-  const [interestInfo, setInterestInfo] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const initialLoadDone = useRef<boolean>(false);
-  const lastSavedState = useRef<string>('');
-  const lastFailedState = useRef<string>('');
 
   const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
   const getSupabase = useCallback(() => {
@@ -151,11 +154,11 @@ export default function ProfilePage() {
     const base = !term
       ? catalog
       : catalog.filter((interest) => {
-          return (
-            interest.name.toLowerCase().includes(term) ||
-            interest.slug.toLowerCase().includes(term)
-          );
-        });
+        return (
+          interest.name.toLowerCase().includes(term) ||
+          interest.slug.toLowerCase().includes(term)
+        );
+      });
     // Exclude interests that are already selected
     return base.filter((interest) => !selectedById.has(interest.id));
   }, [catalog, deferredSearchTerm, selectedById]);
@@ -221,39 +224,8 @@ export default function ProfilePage() {
         setDisplayName(parsed.displayName ?? '');
         setLocationName(parsed.savedLocation ?? '');
         setLoading(false);
-        setInterestsLoading(true);
-
-        try {
-          const [{ interests }, { interests: savedInterests }] =
-            await Promise.all([
-              apiGet<InterestsResponse>('/interests'),
-              apiGet<SelectedInterestsResponse>('/me/interests'),
-            ]);
-
-          if (cancelled) return;
-
-          setCatalog(interests);
-          const sortedInterests = sortSelectedInterests(savedInterests);
-          setSelectedInterests(sortedInterests);
-          lastSavedState.current = JSON.stringify(
-            sortedInterests.map((i) => ({ id: i.id, weight: i.weight })),
-          );
-          initialLoadDone.current = true;
-        } catch (interestLoadError) {
-          if (cancelled) return;
-
-          setInterestError(
-            interestLoadError instanceof Error
-              ? interestLoadError.message
-              : 'Failed to load interests',
-          );
-          setCatalog([]);
-          setSelectedInterests([]);
-        } finally {
-          if (!cancelled) {
-            setInterestsLoading(false);
-          }
-        }
+        // Trigger interests hook to (re)fetch using current auth token
+        void refetchInterests();
       } catch (e) {
         if (!cancelled) {
           setProfile(null);
@@ -351,104 +323,7 @@ export default function ProfilePage() {
     }
   }
 
-  function addInterest(interest: Interest) {
-    setInterestError(null);
-    setInterestInfo(null);
-    setSelectedInterests((current) => {
-      if (current.some((item) => item.id === interest.id)) {
-        return current;
-      }
 
-      return sortSelectedInterests([
-        ...current,
-        {
-          ...interest,
-          weight: DEFAULT_WEIGHT,
-        },
-      ]);
-    });
-  }
-
-  function removeInterest(interestId: string) {
-    setInterestError(null);
-    setInterestInfo(null);
-    setSelectedInterests((current) =>
-      current.filter((item) => item.id !== interestId),
-    );
-  }
-
-  function updateInterestWeight(interestId: string, weight: number) {
-    const nextWeight = clampWeight(weight);
-    setInterestError(null);
-    setInterestInfo(null);
-    setSelectedInterests((current) => {
-      const updated = current.map((item) =>
-        item.id === interestId ? { ...item, weight: nextWeight } : item,
-      );
-      if (draggingId) return updated;
-      return sortSelectedInterests(updated);
-    });
-  }
-
-  useEffect(() => {
-    if (!initialLoadDone.current) return;
-
-    // Check if what we have actually differs from what was last saved
-    const currentState = JSON.stringify(
-      selectedInterests.map((i) => ({ id: i.id, weight: i.weight })),
-    );
-    if (currentState === lastSavedState.current) return;
-    if (lastFailedState.current) {
-      if (currentState === lastFailedState.current) return;
-      lastFailedState.current = '';
-    }
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      setInterestError(null);
-      setInterestInfo(null);
-      setInterestSaving(true);
-
-      // Mark it as saved optimistically before the network request finishes
-      lastSavedState.current = currentState;
-
-      apiJson<SelectedInterestsResponse>('/me/interests', 'PUT', {
-        interests: selectedInterests.map((interest) => ({
-          interestId: interest.id,
-          weight: clampWeight(interest.weight),
-        })),
-      })
-        .then(({ interests }) => {
-          // If we want to replace with backend sorted output:
-          // We must update lastSavedState so the next render doesn't re-trigger save
-          const sorted = sortSelectedInterests(interests);
-          const newBackendState = JSON.stringify(
-            sorted.map((i) => ({ id: i.id, weight: i.weight })),
-          );
-
-          if (!draggingId) {
-            lastSavedState.current = newBackendState;
-            setSelectedInterests(sorted);
-          }
-          lastFailedState.current = '';
-          setInterestSaving(false);
-        })
-        .catch((e) => {
-          lastFailedState.current = currentState;
-          setInterestError(
-            e instanceof Error ? e.message : 'Failed to save interests',
-          );
-          setInterestSaving(false);
-        });
-    }, 700);
-
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
-  }, [selectedInterests, draggingId]);
 
   if (loading) {
     return (
