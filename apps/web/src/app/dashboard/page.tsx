@@ -170,9 +170,9 @@ export default function Dashboard() {
                         <section>
                             <SectionHeader title="Recent Activity" href="/activity" />
                             <div className="bg-slate-800 rounded-lg divide-y divide-slate-700">
-                            {mainActivity.map((activity) => (
+                                {mainActivity.map((activity) => (
                                     <ActivityItem
-                                key={activity.id}
+                                        key={activity.id}
                                         primary={activity.primary}
                                         secondary={activity.secondary}
                                         time={activity.time}
