@@ -79,11 +79,22 @@ model User {
   updatedAt      DateTime @updatedAt
 
   interests UserInterest[]
+  userLocations UserLocation[]
 
   createdGroups    Group[]         @relation("GroupCreatedBy")
   groupMemberships GroupMember[]
   createdEvents    Event[]         @relation("EventCreatedBy")
   eventAttendances EventAttendee[]
+}
+
+model UserLocation {
+  userId    String   @id @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location  Unsupported("geography(Point, 4326)")
+  friendlyName String?
+  updatedAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Group {

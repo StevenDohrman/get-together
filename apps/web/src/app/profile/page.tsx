@@ -10,6 +10,7 @@ type ProfilePayload = {
   appUserId: string | null;
   username: string | null;
   displayName: string | null;
+  savedLocation: string | null;
 };
 
 type Interest = {
@@ -55,6 +56,7 @@ function parseProfile(payload: unknown): ProfilePayload | null {
     appUserId: typeof payload.appUserId === 'string' ? payload.appUserId : null,
     username: optString(payload.username),
     displayName: optString(payload.displayName),
+    savedLocation: optString(payload.savedLocation),
   };
 }
 
@@ -107,6 +109,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [locationName, setLocationName] = useState('');
   const [saving, setSaving] = useState(false);
   const [catalog, setCatalog] = useState<Interest[]>([]);
   const [selectedInterests, setSelectedInterests] = useState<
@@ -216,6 +219,7 @@ export default function ProfilePage() {
         setProfile(parsed);
         setUsername(parsed.username ?? '');
         setDisplayName(parsed.displayName ?? '');
+        setLocationName(parsed.savedLocation ?? '');
         setLoading(false);
         setInterestsLoading(true);
 
@@ -266,7 +270,7 @@ export default function ProfilePage() {
     };
   }, [getSupabase]);
 
-  async function saveProfile() {
+  async function saveProfile(nextGeoLocation?: GeolocationCoordinates | null) {
     setError(null);
     setInfo(null);
 
@@ -298,10 +302,18 @@ export default function ProfilePage() {
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-      const payload: { username: string | null; displayName: string | null } = {
+      const payload: {
+        username: string | null;
+        displayName: string | null;
+        geoLocation?: GeolocationCoordinates | null;
+      } = {
         username: nextUsername.length === 0 ? null : nextUsername,
         displayName: nextDisplay.length === 0 ? null : nextDisplay,
       };
+
+      if (nextGeoLocation !== undefined) {
+        payload.geoLocation = nextGeoLocation;
+      }
 
       const res = await fetch(`${apiUrl}/profile`, {
         method: 'PATCH',
@@ -327,6 +339,7 @@ export default function ProfilePage() {
       setProfile(updated);
       setUsername(updated.username ?? '');
       setDisplayName(updated.displayName ?? '');
+      setLocationName(updated.savedLocation ?? '');
 
       await getSupabase().auth.refreshSession();
 
@@ -564,7 +577,7 @@ export default function ProfilePage() {
                     placeholder="unique_handle"
                   />
                   <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    Optional. Unique in the app (letters, numbers, underscore;
+                    Required. Unique in the app (letters, numbers, underscore;
                     3–30 chars).
                   </p>
                 </div>
@@ -572,11 +585,57 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   className="flex h-12 items-center justify-center rounded-2xl bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-                  onClick={saveProfile}
+                  onClick={() => {
+                    void saveProfile();
+                  }}
                   disabled={saving}
                 >
                   {saving ? 'Saving…' : 'Save profile'}
                 </button>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+                <div>
+                  <label
+                    className="text-sm font-medium text-black dark:text-zinc-50"
+                    htmlFor="location"
+                  >
+                    Location
+                  </label>
+                  <div className="flex gap-4">
+                    {locationName !== null && locationName !== '' ? (
+                      <p className="mt-2">{locationName}</p>
+                    ) : (
+                      <p className="mt-2">Not set</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (!navigator.geolocation) {
+                          setError(
+                            'Geolocation is not supported by your browser.',
+                          );
+                          return;
+                        }
+
+                        navigator.geolocation.getCurrentPosition(
+                          (position) => {
+                            void saveProfile(position.coords);
+                          },
+                          (e) => {
+                            setError(
+                              e instanceof Error
+                                ? e.message
+                                : 'Failed to get location.',
+                            );
+                          },
+                        );
+                      }}
+                      disabled={saving}
+                      className="flex items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
+                    >
+                      Update Location
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 

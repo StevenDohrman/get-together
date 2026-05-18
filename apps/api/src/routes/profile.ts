@@ -18,10 +18,23 @@ const displayNameSchema = z
     return t.length === 0 ? null : t;
   });
 
+const geoLocationSchema = z
+  .object({
+    latitude: z.number(),
+    longitude: z.number(),
+    accuracy: z.number().optional().nullable(),
+    altitude: z.number().optional().nullable(),
+    altitudeAccuracy: z.number().optional().nullable(),
+    heading: z.number().optional().nullable(),
+    speed: z.number().optional().nullable(),
+  })
+  .nullable();
+
 const patchProfileBody = z
   .object({
     username: z.union([usernameSchema, z.null()]).optional(),
     displayName: z.union([displayNameSchema, z.null()]).optional(),
+    geoLocation: geoLocationSchema.optional(),
   })
   .refine(data => data.username !== undefined || data.displayName !== undefined, {
     message: 'Provide at least one of username or displayName',
@@ -67,12 +80,26 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
 
     const row = await resolveAppUser(authUser);
 
+    let savedLocation: string | null = null;
+    if (row) {
+      try {
+        const r =
+          (await prisma.$queryRaw`SELECT "friendlyName" FROM "UserLocation" WHERE "userId" = ${row.id} LIMIT 1`) as {
+            friendlyName: string | null;
+          }[];
+        savedLocation = r?.[0]?.friendlyName ?? null;
+      } catch (err) {
+        req.log.warn(err, 'Failed to read saved location');
+      }
+    }
+
     return reply.send({
       supabaseUserId: authUser.id,
       email: authUser.email ?? null,
       appUserId: row?.id ?? null,
       username: row?.username ?? null,
       displayName: row?.displayName ?? null,
+      savedLocation,
     });
   });
 
@@ -93,7 +120,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       });
     }
 
-    const { username, displayName } = parsed.data;
+    const { username, displayName, geoLocation } = parsed.data;
 
     try {
       let row = await resolveAppUser(authUser);
@@ -139,8 +166,40 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         user_metadata: nextMeta,
       });
       if (metaError) {
-        req.log.error(metaError, 'Failed to sync profile to Supabase user_metadata');
-        return reply.status(500).send({ error: 'Profile saved in database but failed to sync session metadata' });
+        req.log.error(
+          metaError,
+          'Failed to sync profile to Supabase user_metadata',
+        );
+        return reply.status(500).send({
+          error:
+            'Profile saved in database but failed to sync session metadata',
+        });
+      }
+
+      let cityName = 'Unknown';
+      if (geoLocation) {
+        try {
+          cityName = await nearestCity(
+            geoLocation.latitude,
+            geoLocation.longitude,
+          );
+        } catch (err) {
+          req.log.warn(err, 'Failed to resolve nearest city');
+        }
+
+        // Persist the location into PostGIS geography column via raw SQL.
+        try {
+          await prisma.$executeRaw`
+            INSERT INTO "UserLocation" ("userId","location","friendlyName")
+            VALUES (${row.id}, ST_SetSRID(ST_MakePoint(${geoLocation.longitude}, ${geoLocation.latitude}), 4326), ${cityName})
+            ON CONFLICT ("userId") DO UPDATE
+            SET location = EXCLUDED.location,
+                "friendlyName" = EXCLUDED."friendlyName",
+                "updatedAt" = NOW()
+          `;
+        } catch (err) {
+          req.log.error(err, 'Failed to persist user location');
+        }
       }
 
       return reply.send({
@@ -149,6 +208,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         appUserId: row.id,
         username: row.username ?? null,
         displayName: row.displayName ?? null,
+        savedLocation: cityName,
       });
     } catch (e: unknown) {
       if (isPrismaUniqueViolation(e)) {
@@ -163,4 +223,30 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       return reply.status(500).send({ error: 'Failed to update profile' });
     }
   });
+}
+
+async function nearestCity(
+  latitude: number,
+  longitude: number,
+): Promise<string> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+      { headers: { 'User-Agent': 'uconnect-api' } },
+    );
+
+    if (!response.ok) return 'Unknown';
+
+    const data = (await response.json()) as {
+      address?: { city?: string; town?: string; village?: string };
+    };
+    return (
+      data.address?.city ??
+      data.address?.town ??
+      data.address?.village ??
+      'Unknown'
+    );
+  } catch {
+    return 'Unknown';
+  }
 }
