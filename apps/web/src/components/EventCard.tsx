@@ -1,6 +1,4 @@
-'use client';
-
-interface EventCardProps {
+export interface EventCardProps {
     image: string;
     title: string;
     date: string;

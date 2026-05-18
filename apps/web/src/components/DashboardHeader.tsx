@@ -1,36 +1,38 @@
-'use client';
-
-interface StatsCardProps {
+interface DashboardStat {
     icon: string;
     label: string;
 }
 
-function StatsCard({ icon, label, value }: StatsCardProps) {
+interface DashboardHeaderProps {
+    userName: string;
+    intro: string;
+    stats: DashboardStat[];
+}
+
+function StatsCard({ icon, label }: DashboardStat) {
     return (
-        <div className="flex items-center gap-4 bg-slate-800 rounded-lg p-6">
+        <div className="flex items-center gap-4 rounded-lg bg-slate-800 p-6">
             <div className="text-3xl">{icon}</div>
             <div>
-                <p className="text-slate-400 text-sm">{label}</p>
+                <p className="text-sm text-slate-400">{label}</p>
             </div>
         </div>
     );
 }
 
-export default function DashboardHeader() {
+export default function DashboardHeader({ userName, intro, stats }: DashboardHeaderProps) {
     return (
         <div className="space-y-8">
-            {/* Welcome Section */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-8 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 -z-10"></div>
-                <h1 className="text-4xl font-bold mb-2">Good evening, Amanda! 👋</h1>
-                <p className="text-purple-100 text-lg">Let's get you connected today.</p>
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 p-8 text-white">
+                <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-purple-400 opacity-20 blur-3xl" />
+                <h1 className="mb-2 text-4xl font-bold">Good evening, {userName}! 👋</h1>
+                <p className="text-lg text-purple-100">{intro}</p>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatsCard icon="👥" label="Groups" value={12} />
-                <StatsCard icon="🔗" label="Connections" value={156} />
-                <StatsCard icon="📅" label="Events" value={23} />
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                {stats.map((stat) => (
+                    <StatsCard key={stat.label} icon={stat.icon} label={stat.label} />
+                ))}
             </div>
         </div>
     );
