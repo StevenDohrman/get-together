@@ -221,11 +221,15 @@ export function registerEventsRoutes(app: FastifyInstance, deps: EventsRouteDeps
       });
     }
 
-    await prisma.groupEventSubscription
-      .delete({
+    try {
+      await prisma.groupEventSubscription.delete({
         where: { groupId_eventId: { groupId: group.id, eventId: parsed.data.eventId } },
-      })
-      .catch(() => undefined);
+      });
+    } catch (error) {
+      if ((error as Prisma.PrismaClientKnownRequestError).code !== 'P2025') {
+        throw error;
+      }
+    }
 
     return reply.status(204).send();
   });
