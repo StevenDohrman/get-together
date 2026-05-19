@@ -1,6 +1,7 @@
 interface DashboardStat {
     icon: string;
     label: string;
+    value?: string | number;
 }
 
 interface DashboardHeaderProps {
@@ -9,12 +10,13 @@ interface DashboardHeaderProps {
     stats: DashboardStat[];
 }
 
-function StatsCard({ icon, label }: DashboardStat) {
+function StatsCard({ icon, label, value }: DashboardStat) {
     return (
         <div className="flex items-center gap-4 rounded-lg bg-slate-800 p-6">
             <div className="text-3xl">{icon}</div>
             <div>
                 <p className="text-sm text-slate-400">{label}</p>
+                {value !== undefined ? <p className="text-2xl font-semibold text-white">{value}</p> : null}
             </div>
         </div>
     );

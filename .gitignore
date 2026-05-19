@@ -29,3 +29,7 @@ supabase/.branches
 
 # misc
 .DS_Store
+
+# Local AI progress notes (should not be committed)
+docs/AI_HANDOFF_PROGRESS.md
+docs/AI_HANDOFF_TODO.md
