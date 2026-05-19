@@ -50,9 +50,9 @@ Give this file and the repo context to a new AI assistant to connect the fronten
 
 ## Suggested integration checklist (for the AI)
 - [x] Wire `GET /profile` -> populate sidebar/profile components (Phase 1)
-- [ ] Wire `PATCH /profile` for user profile edits and update UI on success
+- [x] Wire `PATCH /profile` for user profile edits and update UI on success
 - [x] Wire `GET /me/interests` and `PUT /me/interests` to preferences UI (Phase 2)
-- [ ] Use `GET /interests` for interest search/autocomplete
+- [x] Use `GET /interests` for interest search/autocomplete
 - [x] Add loading / error states for each API call (basic components added in Phase 1)
 - [ ] Skip locations/group-chats features (stub if UI requires them)
 
@@ -64,7 +64,7 @@ More details and live progress are kept in [docs/AI_HANDOFF_PROGRESS.md](docs/AI
   - [x] Add `DashboardClient` composition layer and wire dashboard page to it
   - [x] Replace static communities with backend-driven group cards
   - [x] Add empty-state and error handling for dashboard groups
-  - Notes: Phase 3 validated with focused file checks; next step is to decide whether to proceed to the remaining checklist items.
+  - Notes: Phase 3 validated with focused file checks; remaining checklist items are now down to the optional skip items.
 
 ## Notes & gotchas
 - API returns `{ error: string }` on failure; `api.ts` throws with that message — show friendly UI messages.

@@ -1,6 +1,6 @@
 'use client';
 
-import { apiGet, apiJson } from '@/lib/api';
+import { apiJson } from '@/lib/api';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useInterests } from '@/lib/hooks/useInterests';
@@ -272,8 +272,6 @@ export default function ProfilePage() {
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('Not signed in');
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
       const payload: {
         username: string | null;
         displayName: string | null;
@@ -287,26 +285,9 @@ export default function ProfilePage() {
         payload.geoLocation = nextGeoLocation;
       }
 
-      const res = await fetch(`${apiUrl}/profile`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const body: unknown = await res.json();
-
-      if (!res.ok) {
-        const msg =
-          typeof body === 'object' && body !== null && 'error' in body
-            ? String((body as Record<string, unknown>).error)
-            : 'Update failed';
-        throw new Error(msg);
-      }
-
-      const updated = parseProfile(body);
+      const updated = parseProfile(
+        await apiJson<unknown>('/profile', 'PATCH', payload),
+      );
       if (!updated) throw new Error('Unexpected response');
       setProfile(updated);
       setUsername(updated.username ?? '');
