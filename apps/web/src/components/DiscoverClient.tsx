@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDiscovery } from '@/lib/hooks/useDiscovery';
 import { useSwipes } from '@/lib/hooks/useSwipes';
 import DiscoverCard from './DiscoverCard';
+import DiscoverFilters from './DiscoverFilters';
 
 export default function DiscoverClient() {
-    const { users, loading, error, loadMore, refetch } = useDiscovery(12);
+    const [filters, setFilters] = useState<Record<string, unknown>>({});
+    const { users, loading, error, loadMore, refetch } = useDiscovery({ initialLimit: 12, filters });
     const [visible, setVisible] = useState(users);
     const [busyId, setBusyId] = useState<string | null>(null);
     const { postSwipe, loading: swipeLoading } = useSwipes();
@@ -14,6 +16,14 @@ export default function DiscoverClient() {
     useEffect(() => {
         setVisible(users);
     }, [users]);
+
+    // After visible changes (e.g., optimistic remove), focus the first card for keyboard users
+    useEffect(() => {
+        if (visible.length === 0) return;
+        const firstId = visible[0].id;
+        const el = document.getElementById(`discover-card-${firstId}`) as HTMLElement | null;
+        if (el) el.focus();
+    }, [visible]);
 
     const handleSwipe = useCallback(async (id: string, decision: 'YES' | 'NO') => {
         setBusyId(id);
@@ -34,9 +44,16 @@ export default function DiscoverClient() {
 
     return (
         <div className="space-y-4 px-4 py-6">
+            <DiscoverFilters onApply={f => setFilters(f)} />
+
             {visible.length === 0 && <div className="text-slate-400">No users found — try adjusting filters.</div>}
             {visible.map(user => (
-                <DiscoverCard key={user.id} user={user} onSwipe={(id, d) => void handleSwipe(id, d)} />
+                <DiscoverCard
+                    key={user.id}
+                    user={user}
+                    onSwipe={(id, d) => void handleSwipe(id, d)}
+                    disabled={!!busyId || swipeLoading}
+                />
             ))}
 
             <div className="mt-4 flex items-center justify-between">

@@ -136,20 +136,15 @@ Break the Discover work into small, commitable stages. Complete and commit each 
   - Implement `useSwipes` to POST to `/matching/swipes`.
   - Wire optimistic UI removal and simple error recovery via `refetch()`.
 
-3. Stage 3 — Filters, query params, and server-side filtering (commit: `discovery/filters`) — Not started
-  - Add `DiscoverFilters` component and local state (location, age range, interests, online status).
-  - Wire filters into `useDiscovery` to include query params (e.g. `?limit=...&ageMin=...&interests=...`).
-  - Persist filter state to URL so users can share/filter links.
-
-4. Stage 4 — Accessibility, keyboard controls, and UI polish (commit: `discovery/a11y-polish`) — Not started
+3. Stage 3 — Accessibility, keyboard controls, and UI polish (commit: `discovery/a11y-polish`) — Not started
   - Keyboard swipe/selection support, focus management, ARIA labels, and responsive layout tweaks.
   - Add loading skeletons, better empty states, and micro-interactions.
 
-5. Stage 5 — Tests: unit and integration for hooks (commit: `discovery/tests`) — Not started
+4. Stage 4 — Tests: unit and integration for hooks (commit: `discovery/tests`) — Not started
   - Unit tests for `useDiscovery` and `useSwipes` (mock `apiGet`/`apiJson`).
   - Integration / component tests for `DiscoverClient` and `DiscoverFilters`.
 
-6. Stage 6 — Final docs, progress update, and open PR (commit: `discovery/release`) — Not started
+5. Stage 5 — Final docs, progress update, and open PR (commit: `discovery/release`) — Not started
   - Update `docs/AI_HANDOFF_PROGRESS.md` with stage completion notes and PR link.
   - Open PR, add testing notes, and request UI review.
 
