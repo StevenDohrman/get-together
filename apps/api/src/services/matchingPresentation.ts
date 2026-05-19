@@ -1,6 +1,7 @@
 import { prismaClient as prisma } from '../db.js';
 import type { Prisma } from '@prisma/client';
 import { FormationInviteStatus, GroupFormationStatus } from '@prisma/client';
+import { getMutualYesUserIds } from './matchingDiscovery.js';
 
 export const publicInterestFieldSelect = { id: true, slug: true, name: true } as const;
 
@@ -131,7 +132,7 @@ export async function listMyFormationInviteCards(appUserId: string): Promise<For
 }
 
 export async function loadMatchingDashboard(appUserId: string) {
-  const [groupSeekings, openInvites, openFromMySeekings] = await Promise.all([
+  const [groupSeekings, openInvites, openFromMySeekings, mutualYesIds] = await Promise.all([
     listSerializedGroupSeekings(appUserId),
     prisma.groupFormationInvite.findMany({
       where: {
@@ -149,6 +150,7 @@ export async function loadMatchingDashboard(appUserId: string) {
       orderBy: { createdAt: 'desc' },
       include: formationProposalInclude,
     }),
+    getMutualYesUserIds(appUserId),
   ]);
 
   const invitesPendingMyAnswer = openInvites
@@ -170,5 +172,6 @@ export async function loadMatchingDashboard(appUserId: string) {
     invitesPendingMyAnswer,
     openFormationsFromMySeekings,
     openFormationsWaitingOnOthers,
+    connectionsCount: mutualYesIds.length,
   };
 }
