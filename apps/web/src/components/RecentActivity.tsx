@@ -64,7 +64,7 @@ function ActivityRow({ item, compact }: { item: ActivityItem; compact: boolean }
     const sender = senderLabel(item);
     const where = groupLabel(item);
     const time = relativeTime(item.createdAt);
-    const target = item.group ? `/groups/${item.group.slug}/chat` : null;
+    const target = item.group ? `/groups/${encodeURIComponent(item.group.slug)}/chat` : null;
 
     const content = (
         <div
