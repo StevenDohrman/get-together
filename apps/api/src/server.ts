@@ -9,6 +9,8 @@ import { registerProfileRoutes } from './routes/profile.js';
 import { registerMatchingRoutes } from './routes/matching.js';
 import { registerGroupsRoutes } from './routes/groups.js';
 import { registerChatsRoutes } from './routes/chats.js';
+import { registerEventsRoutes } from './routes/events.js';
+import { registerActivityRoutes } from './routes/activity.js';
 
 function parseCorsOriginList(raw: string | undefined): Set<string> {
   const trimmed = raw?.trim();
@@ -83,6 +85,8 @@ export function buildServer() {
   registerMatchingRoutes(app, { supabaseAdmin });
   registerGroupsRoutes(app, { supabaseAdmin });
   registerChatsRoutes(app, { supabaseAdmin });
+  registerEventsRoutes(app, { supabaseAdmin });
+  registerActivityRoutes(app, { supabaseAdmin });
 
   app.get('/health', async () => {
     return { ok: true };

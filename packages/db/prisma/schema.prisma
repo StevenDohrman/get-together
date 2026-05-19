@@ -146,10 +146,11 @@ model Group {
   createdById String?     @db.Uuid
   source      GroupSource @default(USER_CREATED)
 
-  members         GroupMember[]
-  interests       GroupInterest[]
-  events          Event[]
-  formationOrigin GroupFormationProposal? @relation("FormationToGroup")
+  members             GroupMember[]
+  interests           GroupInterest[]
+  events              Event[]
+  subscribedEvents    GroupEventSubscription[]
+  formationOrigin     GroupFormationProposal? @relation("FormationToGroup")
 
   chat GroupChat? @relation("GroupChat")
 
@@ -330,6 +331,10 @@ model GroupMember {
   @@index([userId])
 }
 
+/// An event hosted by a group or, when `groupId` is NULL, by UConnect itself
+/// (i.e. a public/app-wide event). Any group can sign up for any event via
+/// `GroupEventSubscription`; sign-up is most useful for public events but is
+/// allowed for group-hosted events too.
 model Event {
   id          String  @id @default(uuid()) @db.Uuid
   title       String
@@ -344,10 +349,12 @@ model Event {
   createdBy   User   @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   createdById String @db.Uuid
 
+  /// Host group. NULL means UConnect/public event.
   group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
   groupId String? @db.Uuid
 
-  attendees EventAttendee[]
+  attendees          EventAttendee[]
+  subscribedByGroups GroupEventSubscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -355,6 +362,21 @@ model Event {
   @@index([startsAt])
   @@index([createdById])
   @@index([groupId])
+}
+
+/// A group "signing up" for an event. Lets a group declare collective interest
+/// in any event, including public/UConnect ones.
+model GroupEventSubscription {
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String @db.Uuid
+
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId String @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  @@id([groupId, eventId])
+  @@index([eventId])
 }
 
 model EventAttendee {

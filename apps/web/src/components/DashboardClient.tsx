@@ -2,13 +2,14 @@
 
 import DashboardHeaderClient from './DashboardHeaderClient';
 import DashboardLayout from './DashboardLayout';
-import ActivityItem from './ActivityItem';
-import CommunityCard from './CommunityCard';
-import EventCard, { type EventCardProps } from './EventCard';
-import SectionHeader from './SectionHeader';
-import Loading from './Loading';
-import ErrorMessage from './ErrorMessage';
+import EventsModule from './EventsModule';
+import EventsSidebar from './EventsSidebar';
+import GroupSeekingsModule from './GroupSeekingsModule';
+import FormationInvitesModule from './FormationInvitesModule';
+import RecentActivity from './RecentActivity';
 import { useGroups } from '@/lib/hooks/useGroups';
+import { useMatchingDashboard } from '@/lib/hooks/useMatchingDashboard';
+import { useUserEvents } from '@/lib/hooks/useUserEvents';
 
 type DashboardStat = {
     icon: string;
@@ -16,232 +17,84 @@ type DashboardStat = {
     value?: string | number;
 };
 
-const featuredEvents: EventCardProps[] = [
-    {
-        image: '🎮',
-        title: 'Game Night Live',
-        date: 'Fri, Aug 23',
-        time: '7:00 PM',
-        eventType: 'Virtual Event',
-        status: "You're going",
-        statusColor: 'bg-purple-600',
-    },
-    {
-        image: '🌅',
-        title: 'Sunset Hike',
-        date: 'Sun, Aug 25',
-        time: '6:30 PM',
-        location: 'Runyon Canyon',
-        status: 'Going',
-        statusColor: 'bg-green-500',
-    },
-];
-
-const sidebarEvents: EventCardProps[] = [
-    {
-        image: '🎮',
-        title: 'Game Night Live',
-        date: 'Fri, Aug 23',
-        time: '7:00 PM',
-        eventType: 'Virtual Event',
-        status: "You're going",
-        statusColor: 'bg-purple-600',
-    },
-    {
-        image: '🎨',
-        title: 'Creative Workshop',
-        date: 'Sat, Aug 24',
-        time: '2:00 PM',
-        location: 'Downtown Studio',
-        status: 'Interested',
-        statusColor: 'bg-yellow-500',
-    },
-    {
-        image: '🌅',
-        title: 'Sunset Hike',
-        date: 'Sun, Aug 25',
-        time: '6:30 PM',
-        location: 'Runyon Canyon',
-        status: 'Going',
-        statusColor: 'bg-green-500',
-    },
-];
-
-const mainActivity = [
-    {
-        id: 'joined-photography-circle',
-        primary: 'You',
-        secondary: 'joined Photography Circle',
-        time: '2h ago',
-        avatarClassName: 'bg-gradient-to-br from-cyan-400 to-blue-500',
-    },
-    {
-        id: 'rsvp-game-night-live',
-        primary: 'You',
-        secondary: "RSVP'd to Game Night Live",
-        time: '5h ago',
-        avatarClassName: 'bg-gradient-to-br from-blue-400 to-purple-500',
-    },
-    {
-        id: 'ethan-joined-hiking-adventures',
-        primary: 'Ethan Parker',
-        secondary: 'joined Hiking Adventures',
-        time: '1d ago',
-        avatarClassName: 'bg-gradient-to-br from-pink-400 to-rose-500',
-    },
-];
-
-const sidebarActivity = [
-    {
-        id: 'sidebar-joined-photography-circle',
-        primary: 'Joined Photography Circle',
-        time: '2h ago',
-        avatarClassName: 'bg-gradient-to-br from-cyan-400 to-blue-500',
-        compact: true,
-    },
-    {
-        id: 'sidebar-rsvp-game-night-live',
-        primary: "RSVP'd to Game Night Live",
-        time: '5h ago',
-        avatarClassName: 'bg-gradient-to-br from-blue-400 to-purple-500',
-        compact: true,
-    },
-    {
-        id: 'sidebar-ethan-joined-hiking-adventures',
-        primary: 'Ethan Parker joined Hiking Adventures',
-        time: '1d ago',
-        avatarClassName: 'bg-gradient-to-br from-pink-400 to-rose-500',
-        compact: true,
-    },
-];
-
-function mapGroupGradient(slug: string, index: number) {
-    const palettes = [
-        {
-            gradientClassName: 'bg-gradient-to-br from-blue-500 to-indigo-600',
-            accentClassName: 'bg-purple-500',
-        },
-        {
-            gradientClassName: 'bg-gradient-to-br from-orange-500 to-yellow-600',
-            accentClassName: 'bg-cyan-500',
-        },
-        {
-            gradientClassName: 'bg-gradient-to-br from-green-500 to-emerald-600',
-            accentClassName: 'bg-orange-500',
-        },
-        {
-            gradientClassName: 'bg-gradient-to-br from-pink-500 to-rose-600',
-            accentClassName: 'bg-emerald-400',
-        },
-    ] as const;
-
-    return palettes[index % palettes.length] ?? palettes[slug.length % palettes.length];
-}
-
 export default function DashboardClient() {
-    const { groups, loading, error } = useGroups();
-
-    const communities = groups.map((group, index) => ({
-        title: group.name,
-        members: `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`,
-        ...mapGroupGradient(group.slug, index),
-    }));
+    const { groups } = useGroups();
+    const { events: upcomingEvents } = useUserEvents({ limit: 50, includePublic: true });
+    const {
+        data,
+        loading: matchingLoading,
+        error: matchingError,
+        createGroupSeeking,
+        deleteGroupSeeking,
+        runFormation,
+        respondToInvite,
+    } = useMatchingDashboard();
 
     const dashboardStats: DashboardStat[] = [
         { icon: '👥', label: 'Groups', value: groups.length },
-        { icon: '🔗', label: 'Connections', value: '—' },
-        { icon: '📅', label: 'Events', value: featuredEvents.length },
+        { icon: '💬', label: 'Connections', value: data.connectionsCount },
+        { icon: '📅', label: 'Events', value: upcomingEvents.length },
     ];
 
     return (
         <DashboardLayout>
             <div className="mx-auto max-w-7xl">
-                <DashboardHeaderClient intro="Let's get you connected today." stats={dashboardStats} />
-
-                <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                     <div className="space-y-8 lg:col-span-2">
-                        <section>
-                            <SectionHeader title="Upcoming Events" href="/events" />
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                {featuredEvents.map((event) => (
-                                    <EventCard key={event.title} {...event} />
-                                ))}
-                            </div>
-                        </section>
+                        <DashboardHeaderClient
+                            intro="Let's get you connected today."
+                            stats={dashboardStats}
+                        />
 
-                        <section>
-                            <SectionHeader title="Your Communities" href="/communities" />
-                            {loading ? <Loading className="mt-4" /> : null}
-                            {error ? <ErrorMessage message={error} /> : null}
-                            {!loading && !error ? (
-                                communities.length > 0 ? (
-                                    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                                        {communities.map((community) => (
-                                            <CommunityCard key={community.title} {...community} />
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 p-6 text-sm text-slate-400">
-                                        You are not a member of any groups yet.
-                                    </div>
-                                )
-                            ) : null}
-                        </section>
+                        <FormationInvitesModule
+                            invitesPendingMyAnswer={data.invitesPendingMyAnswer}
+                            openFormationsWaitingOnOthers={data.openFormationsWaitingOnOthers}
+                            loading={matchingLoading}
+                            error={matchingError}
+                            onRespond={respondToInvite}
+                        />
 
-                        <section>
-                            <SectionHeader title="Recent Activity" href="/activity" />
-                            <div className="divide-y divide-slate-700 rounded-lg bg-slate-800">
-                                {mainActivity.map((activity) => (
-                                    <ActivityItem
-                                        key={activity.id}
-                                        primary={activity.primary}
-                                        secondary={activity.secondary}
-                                        time={activity.time}
-                                        avatarClassName={activity.avatarClassName}
-                                    />
-                                ))}
-                            </div>
-                        </section>
+                        <EventsModule limit={6} />
+
+                        <GroupSeekingsModule
+                            seekings={data.groupSeekings}
+                            openFormationsFromMySeekings={data.openFormationsFromMySeekings}
+                            loading={matchingLoading}
+                            error={matchingError}
+                            onCreate={async input => {
+                                await createGroupSeeking(input);
+                            }}
+                            onDelete={deleteGroupSeeking}
+                            onRunFormation={async id => {
+                                await runFormation(id);
+                            }}
+                        />
+
+                        <RecentActivity limit={3} />
                     </div>
 
                     <div className="space-y-8">
-                        <section>
-                            <h3 className="mb-4 text-lg font-semibold text-white">Upcoming Events</h3>
-                            <div className="space-y-4">
-                                {sidebarEvents.map((event) => (
-                                    <EventCard key={event.title} {...event} />
-                                ))}
-                            </div>
-                        </section>
+                        <EventsSidebar limit={3} />
 
-                        <section>
-                            <h3 className="mb-4 text-lg font-semibold text-white">Recent Activity</h3>
-                            <div className="rounded-lg bg-slate-800 p-4">
-                                <div className="space-y-4">
-                                    {sidebarActivity.map((activity) => (
-                                        <ActivityItem
-                                            key={activity.id}
-                                            primary={activity.primary}
-                                            time={activity.time}
-                                            avatarClassName={activity.avatarClassName}
-                                            compact
-                                        />
-                                    ))}
+                        <RecentActivity limit={3} compact />
+
+                        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-pink-600 p-6 text-white shadow-lg">
+                            <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-pink-400 opacity-30 blur-3xl" />
+                            <div className="relative">
+                                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 text-2xl">
+                                    👥
                                 </div>
+                                <h3 className="mb-2 text-xl font-bold">Grow your network</h3>
+                                <p className="mb-4 text-sm text-purple-100">
+                                    Find people with similar interests and connect!
+                                </p>
+                                <a
+                                    href="/discover"
+                                    className="block w-full rounded-lg bg-white py-2 text-center font-semibold text-purple-600 transition-colors hover:bg-purple-50"
+                                >
+                                    Find People
+                                </a>
                             </div>
-                        </section>
-
-                        <div className="rounded-lg bg-gradient-to-br from-purple-600 to-pink-600 p-6 text-white">
-                            <div className="mb-4 flex items-center gap-3">
-                                <span className="text-3xl">👥</span>
-                            </div>
-                            <h3 className="mb-2 text-xl font-bold">Grow your network</h3>
-                            <p className="mb-4 text-sm text-purple-100">
-                                Find people with similar interests and connect!
-                            </p>
-                            <button className="w-full rounded-lg bg-white py-2 font-semibold text-purple-600 transition-colors hover:bg-purple-50">
-                                Find People
-                            </button>
                         </div>
                     </div>
                 </div>
