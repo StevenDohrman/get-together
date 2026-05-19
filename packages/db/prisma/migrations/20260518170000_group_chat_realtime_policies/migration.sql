@@ -7,12 +7,19 @@ GRANT SELECT ON TABLE "GroupChat" TO authenticated;
 GRANT SELECT ON TABLE "GroupChatMember" TO authenticated;
 GRANT SELECT ON TABLE "GroupChatMessage" TO authenticated;
 
--- Members: a user can see only their own membership rows.
-CREATE POLICY "group_chat_members_select_own"
+-- Members: a user can see membership rows for chats they are a member of.
+CREATE POLICY "group_chat_members_select_if_member"
 ON "GroupChatMember"
 FOR SELECT
 TO authenticated
-USING (auth.uid() = "userId");
+USING (
+  EXISTS (
+    SELECT 1
+    FROM "GroupChatMember" m
+    WHERE m."chatId" = "GroupChatMember"."chatId"
+      AND m."userId" = auth.uid()
+  )
+);
 
 -- Chats: a user can see chats they are a member of.
 CREATE POLICY "group_chat_select_if_member"
