@@ -7,7 +7,7 @@ import ErrorMessage from './ErrorMessage';
 
 interface Props {
     intro: string;
-    stats: { icon: string; label: string }[];
+    stats: { icon: string; label: string; value?: string | number }[];
 }
 
 export default function DashboardHeaderClient({ intro, stats }: Props) {

@@ -49,7 +49,6 @@ Give this file and the repo context to a new AI assistant to connect the fronten
 5. Verify API calls in browser network tab and observe UI updates.
 
 ## Suggested integration checklist (for the AI)
-## Suggested integration checklist (for the AI)
 - [x] Wire `GET /profile` -> populate sidebar/profile components (Phase 1)
 - [ ] Wire `PATCH /profile` for user profile edits and update UI on success
 - [x] Wire `GET /me/interests` and `PUT /me/interests` to preferences UI (Phase 2)
@@ -60,11 +59,12 @@ Give this file and the repo context to a new AI assistant to connect the fronten
 More details and live progress are kept in [docs/AI_HANDOFF_PROGRESS.md](docs/AI_HANDOFF_PROGRESS.md).
 
 ## In Progress
-- [ ] Phase 1 — Identity wiring (branch: `feature/dashboard-ui`) — fetching profile for Sidebar and Dashboard header
-  - [ ] Add `useProfile` hook and small loading/error components
-  - [ ] Wire `Sidebar` to `GET /profile` using `apiGet` via `useProfile`
-  - [ ] Replace hardcoded greeting in dashboard with profile-driven greeting
-  - Notes: Running Phase 1 edits and local tests; will mark items complete after tests pass.
+- [x] Phase 3 — Dashboard groups/data wiring (branch: `feature/dashboard-ui`) — fetching groups for dashboard communities
+  - [x] Add `useGroups` hook for `GET /me/groups`
+  - [x] Add `DashboardClient` composition layer and wire dashboard page to it
+  - [x] Replace static communities with backend-driven group cards
+  - [x] Add empty-state and error handling for dashboard groups
+  - Notes: Phase 3 validated with focused file checks; next step is to decide whether to proceed to the remaining checklist items.
 
 ## Notes & gotchas
 - API returns `{ error: string }` on failure; `api.ts` throws with that message — show friendly UI messages.
