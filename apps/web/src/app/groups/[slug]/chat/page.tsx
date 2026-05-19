@@ -1,8 +1,7 @@
 import GroupChatClient from '@/components/GroupChatClient';
 
 export default async function GroupChatPage(props: {
-  params: Promise<{ slug: string }>;
+  params: { slug: string };
 }) {
-  const params = await props.params;
-  return <GroupChatClient groupSlug={params.slug} />;
+  return <GroupChatClient groupSlug={props.params.slug} />;
 }
