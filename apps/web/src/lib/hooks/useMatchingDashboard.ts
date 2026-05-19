@@ -15,7 +15,7 @@ export type GroupSeekingDto = {
     updatedAt: string;
 };
 
-export type FormationInviteStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+export type FormationInviteStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN';
 export type GroupFormationStatus = 'OPEN' | 'FULFILLED' | 'CANCELLED';
 
 export type FormationMemberDto = {
