@@ -11,7 +11,20 @@ export type EventsRouteDeps = {
 
 const upcomingQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  includePublic: z.coerce.boolean().default(true),
+  includePublic: z
+    .preprocess((value) => {
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (value === 'true') {
+        return true;
+      }
+      if (value === 'false') {
+        return false;
+      }
+      return value;
+    }, z.boolean())
+    .default(true),
 });
 
 const idParam = z.object({
