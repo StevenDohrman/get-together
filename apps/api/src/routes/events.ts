@@ -105,7 +105,7 @@ export function registerEventsRoutes(app: FastifyInstance, deps: EventsRouteDeps
       include: {
         group: { select: { id: true, slug: true, name: true } },
         subscribedByGroups: {
-          where: myGroupIds.length > 0 ? { groupId: { in: myGroupIds } } : undefined,
+          where: myGroupIds.length > 0 ? { groupId: { in: myGroupIds } } : { groupId: { in: [] } },
           select: { groupId: true },
         },
         attendees: {
