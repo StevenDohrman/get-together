@@ -1,5 +1,4 @@
-import dynamic from 'next/dynamic';
-const DiscoverClient = dynamic(() => import('@/components/DiscoverClient'), { ssr: false });
+import DiscoverClient from '@/components/DiscoverClient';
 
 export default function DiscoverPage() {
     return <DiscoverClient />;

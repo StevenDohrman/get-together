@@ -44,6 +44,11 @@ enum FormationInviteStatus {
   WITHDRAWN
 }
 
+enum ChatMessageKind {
+  TEXT
+  SYSTEM
+}
+
 model Interest {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -56,8 +61,8 @@ model Interest {
   parents  InterestRelation[] @relation("child_relations")
   children InterestRelation[] @relation("parent_relations")
 
-  users  UserInterest[]
-  groups GroupInterest[]
+  users                     UserInterest[]
+  groups                    GroupInterest[]
   userGroupSeekingInterests UserGroupSeekingInterest[]
 
   embedding InterestEmbedding?
@@ -66,9 +71,9 @@ model Interest {
 // Join table for self-referential many-to-many to model DAG edges
 model InterestRelation {
   parent   Interest @relation("parent_relations", fields: [parentId], references: [id], onDelete: Cascade)
-  parentId String   @db.Uuid @map("parent_id")
+  parentId String   @map("parent_id") @db.Uuid
   child    Interest @relation("child_relations", fields: [childId], references: [id], onDelete: Cascade)
-  childId  String   @db.Uuid @map("child_id")
+  childId  String   @map("child_id") @db.Uuid
 
   // Optional weight or ordering for the relation
   weight Int? @db.SmallInt
@@ -80,23 +85,23 @@ model InterestRelation {
 }
 
 model InterestEmbedding {
-  id         String   @id @default(uuid()) @db.Uuid
-  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
-  interestId String                   @db.Uuid @unique @map("interest_id")
+  id         String                     @id @default(uuid()) @db.Uuid
+  interest   Interest                   @relation(fields: [interestId], references: [id], onDelete: Cascade)
+  interestId String                     @unique @map("interest_id") @db.Uuid
   vector     Unsupported("vector(768)")
   model      String
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt  DateTime                   @default(now()) @map("created_at")
 
   @@index([interestId])
 }
 
 model User {
-  id             String  @id @default(uuid()) @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
   /// Supabase Auth user id (`sub` / `auth.users.id`); links app profile to the signed-in account.
-  supabaseAuthId String? @unique @map("supabase_auth_id") @db.Uuid
-  email          String  @unique
+  supabaseAuthId String?  @unique @map("supabase_auth_id") @db.Uuid
+  email          String   @unique
   /// Unique handle for mentions, URLs, etc. Enforced in the database.
-  username       String? @unique
+  username       String?  @unique
   /// Human-facing name; not required to be unique.
   displayName    String?
   createdAt      DateTime @default(now())
@@ -112,52 +117,103 @@ model User {
 
   formationInvites GroupFormationInvite[]
 
-  createdGroups    Group[]         @relation("GroupCreatedBy")
-  groupMemberships GroupMember[]
-  createdEvents    Event[]         @relation("EventCreatedBy")
-  eventAttendances EventAttendee[]
+  createdGroups     Group[]            @relation("GroupCreatedBy")
+  groupMemberships  GroupMember[]
+  createdEvents     Event[]            @relation("EventCreatedBy")
+  eventAttendances  EventAttendee[]
+  groupChatMembers  GroupChatMember[]
+  groupChatMessages GroupChatMessage[]
 }
 
 model UserLocation {
-  userId    String   @id @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  location  Unsupported("geography(Point, 4326)")
+  userId       String                                @id @db.Uuid
+  user         User                                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location     Unsupported("geography(Point, 4326)")
   friendlyName String?
-  updatedAt DateTime @default(now())
+  updatedAt    DateTime                              @default(now())
 
   @@index([userId])
 }
 
 model Group {
-  id          String   @id @default(uuid()) @db.Uuid
-  slug        String   @unique
+  id          String  @id @default(uuid()) @db.Uuid
+  slug        String  @unique
   name        String
   description String?
 
   /// Nullable because matched groups are created by the app, not by a user.
-  createdBy   User?  @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdById String? @db.Uuid
+  createdBy   User?       @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?     @db.Uuid
   source      GroupSource @default(USER_CREATED)
 
-  members   GroupMember[]
-  interests GroupInterest[]
-  events    Event[]
+  members         GroupMember[]
+  interests       GroupInterest[]
+  events          Event[]
   formationOrigin GroupFormationProposal? @relation("FormationToGroup")
 
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  chat GroupChat? @relation("GroupChat")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([createdById])
 }
 
+model GroupChat {
+  id String @id @default(uuid()) @db.Uuid
+
+  proposalId String?                 @unique @db.Uuid
+  proposal   GroupFormationProposal? @relation("ProposalChat", fields: [proposalId], references: [id], onDelete: Cascade)
+
+  groupId String? @unique @db.Uuid
+  group   Group?  @relation("GroupChat", fields: [groupId], references: [id], onDelete: Cascade)
+
+  members  GroupChatMember[]
+  messages GroupChatMessage[]
+
+  createdAt DateTime @default(now())
+}
+
+model GroupChatMember {
+  chatId String    @db.Uuid
+  chat   GroupChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime @default(now())
+
+  @@id([chatId, userId])
+  @@index([userId])
+}
+
+model GroupChatMessage {
+  id String @id @default(uuid()) @db.Uuid
+
+  chatId String    @db.Uuid
+  chat   GroupChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  senderId String @db.Uuid
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  kind    ChatMessageKind @default(TEXT)
+  body    String
+  payload Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+}
+
 model UserInterest {
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String   @db.Uuid
   interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
   interestId String   @db.Uuid
 
   // Importance of this interest for the user. Convention: 1-10.
-  weight Int @default(5) @db.SmallInt
+  weight    Int      @default(5) @db.SmallInt
   createdAt DateTime @default(now())
 
   @@id([userId, interestId])
@@ -166,14 +222,14 @@ model UserInterest {
 
 /// A swipe on another user (yes/no). Used for mutual-match discovery separate from group-seeking interests.
 model UserSwipe {
-  swiper   User @relation("SwipesInitiated", fields: [swiperId], references: [id], onDelete: Cascade)
-  swiperId String @db.Uuid
-  target   User @relation("SwipesReceived", fields: [targetUserId], references: [id], onDelete: Cascade)
+  swiper       User   @relation("SwipesInitiated", fields: [swiperId], references: [id], onDelete: Cascade)
+  swiperId     String @db.Uuid
+  target       User   @relation("SwipesReceived", fields: [targetUserId], references: [id], onDelete: Cascade)
   targetUserId String @db.Uuid
 
-  decision SwipeDecision
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  decision  SwipeDecision
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@id([swiperId, targetUserId])
   @@index([targetUserId])
@@ -191,8 +247,8 @@ model UserGroupSeeking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  interests  UserGroupSeekingInterest[]
-  proposals  GroupFormationProposal[]
+  interests UserGroupSeekingInterest[]
+  proposals GroupFormationProposal[]
 
   @@index([userId])
 }
@@ -218,6 +274,8 @@ model GroupFormationProposal {
 
   formedGroupId String? @unique @db.Uuid
   formedGroup   Group?  @relation("FormationToGroup", fields: [formedGroupId], references: [id], onDelete: SetNull)
+
+  chat GroupChat? @relation("ProposalChat")
 
   invites GroupFormationInvite[]
 
@@ -247,13 +305,13 @@ model GroupFormationInvite {
 }
 
 model GroupInterest {
-  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  groupId String   @db.Uuid
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId    String   @db.Uuid
   interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
   interestId String   @db.Uuid
 
   // How strongly this group is associated with an interest. Convention: 1-10.
-  weight Int @default(5) @db.SmallInt
+  weight    Int      @default(5) @db.SmallInt
   createdAt DateTime @default(now())
 
   @@id([groupId, interestId])
@@ -261,24 +319,24 @@ model GroupInterest {
 }
 
 model GroupMember {
-  group   Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  groupId String    @db.Uuid
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId  String    @db.Uuid
-  role    GroupRole @default(MEMBER)
-  joinedAt DateTime @default(now())
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId  String    @db.Uuid
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String    @db.Uuid
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
 
   @@id([groupId, userId])
   @@index([userId])
 }
 
 model Event {
-  id        String   @id @default(uuid()) @db.Uuid
-  title     String
+  id          String  @id @default(uuid()) @db.Uuid
+  title       String
   description String?
 
-  startsAt  DateTime
-  endsAt    DateTime?
+  startsAt DateTime
+  endsAt   DateTime?
 
   locationName    String?
   locationAddress String?
@@ -300,12 +358,12 @@ model Event {
 }
 
 model EventAttendee {
-  event   Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  eventId String     @db.Uuid
-  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId  String     @db.Uuid
-  status  RSVPStatus @default(GOING)
-  createdAt DateTime @default(now())
+  event     Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId   String     @db.Uuid
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String     @db.Uuid
+  status    RSVPStatus @default(GOING)
+  createdAt DateTime   @default(now())
 
   @@id([eventId, userId])
   @@index([userId])

@@ -119,6 +119,9 @@ export default function ProfilePage() {
     saving: interestSaving,
     error: interestError,
     info: interestInfo,
+    draggingId,
+    startDragging,
+    stopDragging,
     add: addInterest,
     remove: removeInterest,
     updateWeight: updateInterestWeight,
@@ -128,7 +131,6 @@ export default function ProfilePage() {
   const [info, setInfo] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -168,8 +170,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!draggingId) return;
     const finish = () => {
-      setDraggingId(null);
-      setSelectedInterests((cur) => sortSelectedInterests(cur));
+      stopDragging();
     };
     window.addEventListener('pointerup', finish);
     window.addEventListener('pointercancel', finish);
@@ -177,7 +178,7 @@ export default function ProfilePage() {
       window.removeEventListener('pointerup', finish);
       window.removeEventListener('pointercancel', finish);
     };
-  }, [draggingId]);
+  }, [draggingId, stopDragging]);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +232,6 @@ export default function ProfilePage() {
           setProfile(null);
           setError(e instanceof Error ? e.message : 'Failed to load profile');
           setLoading(false);
-          setInterestsLoading(false);
         }
       }
     }
@@ -476,7 +476,7 @@ export default function ProfilePage() {
                           (position) => {
                             void saveProfile(position.coords);
                           },
-                          (e) => {
+                          (e: GeolocationPositionError) => {
                             setError(
                               e instanceof Error
                                 ? e.message
@@ -639,7 +639,7 @@ export default function ProfilePage() {
                           max={MAX_WEIGHT}
                           step={1}
                           value={interest.weight}
-                          onPointerDown={() => setDraggingId(interest.id)}
+                          onPointerDown={() => startDragging(interest.id)}
                           onChange={(e) =>
                             updateInterestWeight(
                               interest.id,
