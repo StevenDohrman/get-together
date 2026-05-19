@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { getMutualYesUserIds } from './matchingDiscovery.js';
 import { normalizedWeightedOverlap, weightedVectorForInterestIds } from './matchingScoring.js';
+import { ensureProposalGroupChat } from './groupChat.js';
 
 export const MAX_GROUP_SEEKINGS_PER_USER = 10;
 
@@ -342,6 +343,7 @@ export async function respondFormationInvite(
       data: { status: FormationInviteStatus.ACCEPTED },
     });
     await maybeFulfillProposal(proposalId);
+    await ensureProposalGroupChat(proposalId);
     return { ok: true as const };
   }
 

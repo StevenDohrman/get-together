@@ -71,6 +71,17 @@ type State = {
     role: GroupRole;
     joinedAt: Date;
   }[];
+  groupChats: {
+    id: string;
+    proposalId: string | null;
+    groupId: string | null;
+    createdAt: Date;
+  }[];
+  groupChatMembers: {
+    chatId: string;
+    userId: string;
+    joinedAt: Date;
+  }[];
   calls: {
     swipeUpserts: unknown[];
     seekingCreates: unknown[];
@@ -151,6 +162,8 @@ function resetState() {
     formationInvites: [],
     groups: [],
     groupMemberships: [],
+    groupChats: [],
+    groupChatMembers: [],
     calls: {
       swipeUpserts: [],
       seekingCreates: [],
@@ -418,6 +431,49 @@ const prisma = {
         });
       }
       return row;
+    },
+  },
+  groupChat: {
+    upsert: async (args: {
+      where: { proposalId: string };
+      create: { proposalId: string; groupId?: string };
+      update: { groupId?: string };
+    }) => {
+      const existing = state.groupChats.find(c => c.proposalId === args.where.proposalId) ?? null;
+      if (existing) {
+        if (args.update.groupId !== undefined) existing.groupId = args.update.groupId;
+        return existing;
+      }
+
+      const chatNumber = state.groupChats.length + 1;
+      const row = {
+        id: `60000000-0000-4000-8000-${String(chatNumber).padStart(12, '0')}`,
+        proposalId: args.create.proposalId,
+        groupId: args.create.groupId ?? null,
+        createdAt: new Date('2026-05-15T15:00:00.000Z'),
+      };
+      state.groupChats.push(row);
+      return row;
+    },
+  },
+  groupChatMember: {
+    findMany: async ({ where }: { where: { chatId: string } }) =>
+      state.groupChatMembers.filter(m => m.chatId === where.chatId),
+    findUnique: async ({ where }: { where: { chatId_userId: { chatId: string; userId: string } } }) => {
+      const key = where.chatId_userId;
+      return state.groupChatMembers.find(m => m.chatId === key.chatId && m.userId === key.userId) ?? null;
+    },
+    createMany: async ({ data }: { data: { chatId: string; userId: string }[]; skipDuplicates?: boolean }) => {
+      for (const row of data) {
+        const exists = state.groupChatMembers.some(m => m.chatId === row.chatId && m.userId === row.userId);
+        if (exists) continue;
+        state.groupChatMembers.push({
+          chatId: row.chatId,
+          userId: row.userId,
+          joinedAt: new Date('2026-05-15T15:00:00.000Z'),
+        });
+      }
+      return { count: data.length };
     },
   },
   groupMember: {
