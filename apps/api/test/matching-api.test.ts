@@ -818,6 +818,18 @@ describe('matching APIs', () => {
     assert.equal(state.formationProposals[0].status, GroupFormationStatus.FULFILLED);
     assert.equal(state.groups.length, 1);
     assert.deepEqual(state.groups[0].memberIds.sort(), [ME, USER_A, USER_B].sort());
+
+    // Once >=2 users accept, a proposal chat should exist and include all accepted members.
+    assert.equal(state.groupChats.length, 1);
+    assert.equal(state.groupChats[0]?.proposalId, PROPOSAL_ID);
+    assert.equal(state.groupChats[0]?.groupId, state.groups[0]?.id);
+    assert.deepEqual(
+      state.groupChatMembers
+        .filter(m => m.chatId === state.groupChats[0]?.id)
+        .map(m => m.userId)
+        .sort(),
+      [ME, USER_A, USER_B].sort(),
+    );
   });
 
   it('returns dashboard sections for seekings and pending formations', async () => {

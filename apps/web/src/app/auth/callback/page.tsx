@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabaseBrowser";
 
@@ -9,6 +9,27 @@ function isValidUsername(value: string): boolean {
 }
 
 export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center bg-zinc-50 px-6 py-16 dark:bg-black">
+          <div className="w-full max-w-md rounded-2xl border border-black/8 bg-white p-6 shadow-sm dark:border-white/12 dark:bg-black">
+            <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
+              Finishing sign-in…
+            </h1>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              You can close this tab if it doesn’t redirect.
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <AuthCallbackInner />
+    </Suspense>
+  );
+}
+
+function AuthCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);

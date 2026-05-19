@@ -35,10 +35,11 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 export async function apiGet<T>(path: string): Promise<T> {
   const token = await getAccessToken();
-  const headers = new Headers();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
+  if (!token) {
+    throw new Error('Not signed in');
   }
+  const headers = new Headers();
+  headers.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(getApiUrl(path), {
     method: 'GET',
@@ -58,11 +59,12 @@ export async function apiJson<T>(
   body?: JsonValue,
 ): Promise<T> {
   const token = await getAccessToken();
+  if (!token) {
+    throw new Error('Not signed in');
+  }
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
+  headers.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(getApiUrl(path), {
     method,

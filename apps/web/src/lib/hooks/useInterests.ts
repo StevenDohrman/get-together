@@ -22,6 +22,14 @@ export function useInterests() {
     const [saving, setSaving] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [info, setInfo] = useState<string | null>(null);
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+
+    // Guardrail: this hook auto-saves by default. We should only allow saves
+    // after we've successfully hydrated from the server at least once.
+    // Otherwise transient load failures can accidentally PUT an empty list.
+    const hasHydrated = useRef<boolean>(false);
+
+    const prevDraggingId = useRef<string | null>(null);
 
     const saveTimeout = useRef<NodeJS.Timeout | null>(null);
     const lastSavedState = useRef<string>('');
@@ -36,16 +44,20 @@ export function useInterests() {
                 apiGet<SelectedInterestsResponse>('/me/interests'),
             ]);
             setCatalog(interests);
-            setSelectedInterests(savedInterests.slice().sort((a, b) => {
+            const sortedSaved = savedInterests.slice().sort((a, b) => {
                 if (b.weight !== a.weight) return b.weight - a.weight;
                 return a.name.localeCompare(b.name);
-            }));
-            lastSavedState.current = JSON.stringify(savedInterests.map(i => ({ id: i.id, weight: i.weight })));
+            });
+            setSelectedInterests(sortedSaved);
+            lastSavedState.current = JSON.stringify(sortedSaved.map(i => ({ id: i.id, weight: i.weight })));
             lastFailedState.current = '';
+            hasHydrated.current = true;
         } catch (e: any) {
             setError(e?.message ?? 'Failed to load interests');
             setCatalog([]);
-            setSelectedInterests([]);
+            // Preserve previous selection if we already have one; avoid clearing
+            // during failures since this hook auto-saves.
+            if (!hasHydrated.current) setSelectedInterests([]);
         } finally {
             setLoading(false);
         }
@@ -78,15 +90,38 @@ export function useInterests() {
         setInfo(null);
         setSelectedInterests(cur => {
             const next = cur.map(i => i.id === id ? { ...i, weight } : i);
+            // While a user is dragging a slider, keep the existing order so the
+            // element doesn't jump away from their pointer.
+            if (draggingId) return next;
             return next.sort((a, b) => {
                 if (b.weight !== a.weight) return b.weight - a.weight;
                 return a.name.localeCompare(b.name);
             });
         });
+    }, [draggingId]);
+
+    const startDragging = useCallback((id: string) => {
+        setDraggingId(id);
     }, []);
+
+    const stopDragging = useCallback(() => {
+        setDraggingId(null);
+    }, []);
+
+    useEffect(() => {
+        // Re-sort once dragging finishes.
+        if (prevDraggingId.current && !draggingId) {
+            setSelectedInterests(cur => cur.slice().sort((a, b) => {
+                if (b.weight !== a.weight) return b.weight - a.weight;
+                return a.name.localeCompare(b.name);
+            }));
+        }
+        prevDraggingId.current = draggingId;
+    }, [draggingId]);
 
     // Auto-save selectedInterests with debounce
     useEffect(() => {
+        if (!hasHydrated.current) return;
         if (saveTimeout.current) clearTimeout(saveTimeout.current);
 
         const currentState = JSON.stringify(selectedInterests.map(i => ({ id: i.id, weight: i.weight })));
@@ -131,6 +166,9 @@ export function useInterests() {
         saving,
         error,
         info,
+        draggingId,
+        startDragging,
+        stopDragging,
         add,
         remove,
         updateWeight,
