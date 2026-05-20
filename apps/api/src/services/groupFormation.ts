@@ -273,6 +273,25 @@ async function maybeFulfillProposal(proposalId: string) {
   const accepted = proposal.invites.filter(i => i.status === FormationInviteStatus.ACCEPTED);
   if (accepted.length !== target) return;
 
+  const acceptedUserIds = accepted.map(inv => inv.userId);
+
+  // Idempotency: when two users each own a seeking and they mutually swipe yes,
+  // both ends produce a `GroupFormationProposal` with the same accepted member
+  // set. The first to fulfill creates the group; subsequent proposals must
+  // reuse that group instead of cloning it. We match on (member set, size,
+  // APP_FORMED source) — interests can differ harmlessly across the proposals.
+  const existingGroup = await findAppFormedGroupWithExactMembers(acceptedUserIds);
+  if (existingGroup) {
+    await prisma.groupFormationProposal.update({
+      where: { id: proposalId },
+      data: {
+        status: GroupFormationStatus.FULFILLED,
+        formedGroupId: existingGroup.id,
+      },
+    });
+    return;
+  }
+
   const interestNames = proposal.userGroupSeeking.interests.map(i => i.interest.name);
   const name =
     interestNames.length <= 2
@@ -316,6 +335,33 @@ async function maybeFulfillProposal(proposalId: string) {
       },
     });
   });
+}
+
+/**
+ * Find an APP_FORMED group whose member set is exactly `userIds` (no more, no less).
+ *
+ * Note: this is a best-effort dedupe and is not fully race-safe under
+ * simultaneous concurrent fulfillment. If both proposals fulfill at the same
+ * instant they can still race past this check and create two groups. A
+ * follow-up should add a unique constraint on a deterministic member-set key
+ * to make this race-free, but the sequential case (two users accepting
+ * invites at different times) is the realistic scenario and is fully handled.
+ */
+async function findAppFormedGroupWithExactMembers(
+  userIds: string[],
+): Promise<{ id: string } | null> {
+  if (userIds.length === 0) return null;
+  const groups = await prisma.group.findMany({
+    where: {
+      source: GroupSource.APP_FORMED,
+      members: { every: { userId: { in: userIds } } },
+    },
+    select: {
+      id: true,
+      _count: { select: { members: true } },
+    },
+  });
+  return groups.find(g => g._count.members === userIds.length) ?? null;
 }
 
 export async function respondFormationInvite(

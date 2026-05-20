@@ -29,17 +29,32 @@ export async function ensureProposalGroupChat(proposalId: string): Promise<Ensur
     return { chatId: null, addedUserIds: [] };
   }
 
-  const chat = await prisma.groupChat.upsert({
-    where: { proposalId: proposal.id },
-    create: {
-      proposalId: proposal.id,
-      ...(proposal.formedGroupId ? { groupId: proposal.formedGroupId } : {}),
-    },
-    update: {
-      ...(proposal.formedGroupId ? { groupId: proposal.formedGroupId } : {}),
-    },
-    select: { id: true, groupId: true },
-  });
+  // If this proposal's formed group already has a chat (because another
+  // proposal between the same users fulfilled first and reused this group),
+  // attach to that chat instead of trying to create a second one — `groupId`
+  // is unique on GroupChat, so a duplicate would otherwise throw.
+  let chat: { id: string; groupId: string | null } | null = null;
+  if (proposal.formedGroupId) {
+    const existing = await prisma.groupChat.findUnique({
+      where: { groupId: proposal.formedGroupId },
+      select: { id: true, groupId: true },
+    });
+    if (existing) chat = existing;
+  }
+
+  if (!chat) {
+    chat = await prisma.groupChat.upsert({
+      where: { proposalId: proposal.id },
+      create: {
+        proposalId: proposal.id,
+        ...(proposal.formedGroupId ? { groupId: proposal.formedGroupId } : {}),
+      },
+      update: {
+        ...(proposal.formedGroupId ? { groupId: proposal.formedGroupId } : {}),
+      },
+      select: { id: true, groupId: true },
+    });
+  }
 
   const existingMembers = await prisma.groupChatMember.findMany({
     where: { chatId: chat.id },

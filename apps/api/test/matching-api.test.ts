@@ -5,6 +5,7 @@ import {
   FormationInviteStatus,
   GroupFormationStatus,
   GroupRole,
+  GroupSource,
   SwipeDecision,
 } from '@prisma/client';
 
@@ -73,6 +74,7 @@ type State = {
     name: string;
     description?: string | null;
     createdById: string;
+    source: GroupSource;
     memberIds: string[];
   }[];
   groupMemberships: {
@@ -227,8 +229,16 @@ function matchesWhere<T extends Record<string, unknown>>(row: T, where: Record<s
 const prisma = {
   user: {
     findUnique: async ({ where }: { where: { id?: string; email?: string; supabaseAuthId?: string } }) =>
-      state.users.find(u => u.id === where.id || u.email === where.email || u.supabaseAuthId === where.supabaseAuthId) ??
-      null,
+      // Mirror Prisma's behaviour: `findUnique` looks up by exactly one of the
+      // provided unique fields. Using a naive OR across all three would let
+      // a `supabaseAuthId: undefined` lookup accidentally match the first
+      // user whose own supabaseAuthId is also undefined.
+      state.users.find(u => {
+        if (where.id !== undefined) return u.id === where.id;
+        if (where.email !== undefined) return u.email === where.email;
+        if (where.supabaseAuthId !== undefined) return u.supabaseAuthId === where.supabaseAuthId;
+        return false;
+      }) ?? null,
     findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
       state.users
         .filter(u => where.id.in.includes(u.id))
@@ -324,6 +334,18 @@ const prisma = {
           }
           if (where.targetGroupSize && typeof where.targetGroupSize === 'object' && 'in' in where.targetGroupSize) {
             if (!(where.targetGroupSize.in as number[]).includes(row.targetGroupSize)) return false;
+          }
+          // `proposals: { none: { status: FULFILLED } }` — used to filter out
+          // seekings whose proposal has already produced a group.
+          if (where.proposals && typeof where.proposals === 'object' && 'none' in where.proposals) {
+            const noneFilter = (where.proposals as { none: { status?: GroupFormationStatus } }).none;
+            const proposalsForSeeking = state.formationProposals.filter(
+              p => p.userGroupSeekingId === row.id,
+            );
+            const offenders = noneFilter.status
+              ? proposalsForSeeking.filter(p => p.status === noneFilter.status)
+              : proposalsForSeeking;
+            if (offenders.length > 0) return false;
           }
           return true;
         })
@@ -439,13 +461,32 @@ const prisma = {
   },
   group: {
     findUnique: async ({ where }: { where: { slug: string } }) => state.groups.find(g => g.slug === where.slug) ?? null,
-    create: async ({ data }: { data: { slug: string; name: string; createdById: string; members: { create: { userId: string; role: GroupRole }[] } } }) => {
+    findMany: async (args: {
+      where?: {
+        source?: GroupSource;
+        members?: { every?: { userId?: { in?: string[] } } };
+      };
+    }) => {
+      const where = args.where ?? {};
+      const everyIds = where.members?.every?.userId?.in;
+      return state.groups
+        .filter(g => {
+          if (where.source !== undefined && (g as { source?: GroupSource }).source !== where.source) {
+            return false;
+          }
+          if (everyIds && !g.memberIds.every(uid => everyIds.includes(uid))) return false;
+          return true;
+        })
+        .map(g => ({ id: g.id, _count: { members: g.memberIds.length } }));
+    },
+    create: async ({ data }: { data: { slug: string; name: string; createdById?: string; source?: GroupSource; members: { create: { userId: string; role: GroupRole }[] } } }) => {
       state.calls.groupsCreated.push(data);
       const row = {
         id: `50000000-0000-4000-8000-${String(state.groups.length + 100).padStart(12, '0')}`,
         slug: data.slug,
         name: data.name,
-        createdById: data.createdById,
+        createdById: data.createdById ?? '',
+        source: data.source ?? GroupSource.USER_CREATED,
         memberIds: data.members.create.map(m => m.userId),
       };
       state.groups.push(row);
@@ -461,6 +502,15 @@ const prisma = {
     },
   },
   groupChat: {
+    findUnique: async ({ where }: { where: { groupId?: string; proposalId?: string } }) => {
+      if (where.groupId !== undefined) {
+        return state.groupChats.find(c => c.groupId === where.groupId) ?? null;
+      }
+      if (where.proposalId !== undefined) {
+        return state.groupChats.find(c => c.proposalId === where.proposalId) ?? null;
+      }
+      return null;
+    },
     upsert: async (args: {
       where: { proposalId: string };
       create: { proposalId: string; groupId?: string };
@@ -1087,6 +1137,173 @@ describe('matching APIs', () => {
     );
   });
 
+  it('reuses a single group when two opposing proposals fulfill for the same member set', async () => {
+    // Scenario: A and B each own a size-2 group seeking on the same interest.
+    // Mutual yes spawns proposal_a (A=ACCEPTED, B=PENDING) and proposal_b
+    // (B=ACCEPTED, A=PENDING). A accepts proposal_b first → group formed.
+    // B accepts proposal_a second → must reuse the same group instead of
+    // creating a duplicate.
+    const SEEKING_A = '20000000-0000-4000-8000-0000000000aa';
+    const SEEKING_B = '20000000-0000-4000-8000-0000000000bb';
+    const PROPOSAL_A = '30000000-0000-4000-8000-0000000000aa';
+    const PROPOSAL_B = '30000000-0000-4000-8000-0000000000bb';
+
+    // Replace the default ME seeking so only A/B's seekings exist under test.
+    state.groupSeekings = [
+      {
+        id: SEEKING_A,
+        userId: USER_A,
+        targetGroupSize: 2,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: SEEKING_B,
+        userId: USER_B,
+        targetGroupSize: 2,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    state.formationProposals.push(
+      {
+        id: PROPOSAL_A,
+        userGroupSeekingId: SEEKING_A,
+        status: GroupFormationStatus.OPEN,
+        formedGroupId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: PROPOSAL_B,
+        userGroupSeekingId: SEEKING_B,
+        status: GroupFormationStatus.OPEN,
+        formedGroupId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+    state.formationInvites.push(
+      // proposal_a: A accepted (seed), B pending
+      {
+        id: '40000000-0000-4000-8000-0000000000a1',
+        proposalId: PROPOSAL_A,
+        userId: USER_A,
+        status: FormationInviteStatus.ACCEPTED,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '40000000-0000-4000-8000-0000000000a2',
+        proposalId: PROPOSAL_A,
+        userId: USER_B,
+        status: FormationInviteStatus.PENDING,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // proposal_b: B accepted (seed), A pending
+      {
+        id: '40000000-0000-4000-8000-0000000000b1',
+        proposalId: PROPOSAL_B,
+        userId: USER_B,
+        status: FormationInviteStatus.ACCEPTED,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '40000000-0000-4000-8000-0000000000b2',
+        proposalId: PROPOSAL_B,
+        userId: USER_A,
+        status: FormationInviteStatus.PENDING,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    // Use a per-test mock whose identity is swapped between steps via a token
+    // (`user-a` vs `user-b`). Registering routes against a fresh Fastify
+    // instance per step also works, but a shared mock keeps the test compact.
+    const dualSupabase = {
+      auth: {
+        getUser: async (token: string) => {
+          if (token === 'user-a') return { data: { user: { id: USER_A, email: 'a2@example.com' } }, error: null };
+          if (token === 'user-b') return { data: { user: { id: USER_B, email: 'b2@example.com' } }, error: null };
+          return { data: { user: null }, error: new Error('bad token') };
+        },
+      },
+    } as never;
+
+    const app = Fastify({ logger: false });
+    registerMatchingRoutes(app, { supabaseAdmin: dualSupabase });
+
+    // Step 1: USER_A accepts proposal_b — group is formed.
+    let resp = await app.inject({
+      method: 'POST',
+      url: `/matching/formation/proposals/${PROPOSAL_B}/invites/respond`,
+      headers: { authorization: 'Bearer user-a' },
+      payload: { accept: true },
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.equal(state.groups.length, 1, 'first acceptance creates exactly one group');
+
+    // Step 2: USER_B accepts proposal_a — must REUSE the group.
+    resp = await app.inject({
+      method: 'POST',
+      url: `/matching/formation/proposals/${PROPOSAL_A}/invites/respond`,
+      headers: { authorization: 'Bearer user-b' },
+      payload: { accept: true },
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.equal(state.groups.length, 1, 'second acceptance must NOT create a second group');
+
+    // Both proposals end FULFILLED pointing at the same group.
+    const propA = state.formationProposals.find(p => p.id === PROPOSAL_A);
+    const propB = state.formationProposals.find(p => p.id === PROPOSAL_B);
+    assert.equal(propA?.status, GroupFormationStatus.FULFILLED);
+    assert.equal(propB?.status, GroupFormationStatus.FULFILLED);
+    assert.equal(propA?.formedGroupId, state.groups[0]?.id);
+    assert.equal(propB?.formedGroupId, state.groups[0]?.id);
+
+    // Exactly one chat, both users members of it (no duplicate chat for the
+    // second proposal even though that proposal now points at the same group).
+    assert.equal(state.groupChats.length, 1, 'second proposal reuses the existing chat');
+    assert.deepEqual(
+      state.groupChatMembers
+        .filter(m => m.chatId === state.groupChats[0]?.id)
+        .map(m => m.userId)
+        .sort(),
+      [USER_A, USER_B].sort(),
+    );
+  });
+
+  it('hides seekings from the dashboard once their proposal has been fulfilled', async () => {
+    // ME's default seeking from `resetState()` is SEEKING_ID. Mark it fulfilled.
+    state.formationProposals.push({
+      id: PROPOSAL_ID,
+      userGroupSeekingId: SEEKING_ID,
+      status: GroupFormationStatus.FULFILLED,
+      formedGroupId: '50000000-0000-4000-8000-000000000999',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/me/matching/dashboard',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      response.json().groupSeekings,
+      [],
+      'fulfilled seekings should not appear in the active list',
+    );
+  });
+
   it('surfaces bio and photo URLs on discovery cards', async () => {
     state.users[1] = { ...state.users[1], bio: 'Coffee, books, long walks.' };
     state.userPhotos.push(
@@ -1446,6 +1663,7 @@ describe('groups API', () => {
       slug: 'board games',
       name: 'Board Games',
       createdById: USER_A,
+      source: GroupSource.USER_CREATED,
       memberIds: [ME, USER_A, USER_B],
     });
     state.groupMemberships.push({

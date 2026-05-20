@@ -96,7 +96,13 @@ export function formationCardFromProposalForUser(
 
 export async function listSerializedGroupSeekings(appUserId: string): Promise<GroupSeekingDto[]> {
   const list = await prisma.userGroupSeeking.findMany({
-    where: { userId: appUserId },
+    // A seeking is "consumed" once any of its proposals fulfills into a real
+    // group, so hide it from the active list. The row is kept for history /
+    // referential integrity but no longer drives discovery or formation.
+    where: {
+      userId: appUserId,
+      proposals: { none: { status: GroupFormationStatus.FULFILLED } },
+    },
     orderBy: { createdAt: 'asc' },
     include: {
       interests: {
