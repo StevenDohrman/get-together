@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from '@/lib/api';
 
+export type ProfilePhoto = {
+    id: string;
+    url: string;
+    position: number;
+};
+
 export type Profile = {
     supabaseUserId?: string;
     email?: string;
     appUserId?: string;
     username?: string | null;
     displayName?: string | null;
+    bio?: string | null;
+    photos?: ProfilePhoto[];
+    savedLocation?: string | null;
 };
 
 export function useProfile() {

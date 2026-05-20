@@ -81,7 +81,7 @@ export function buildServer() {
 
   registerAuthRoutes(app, { supabaseAdmin });
   registerInterestsRoutes(app, { supabaseAdmin });
-  registerProfileRoutes(app, { supabaseAdmin });
+  registerProfileRoutes(app, { supabaseAdmin, supabaseUrl: env.SUPABASE_URL ?? null });
   registerMatchingRoutes(app, { supabaseAdmin });
   registerGroupsRoutes(app, { supabaseAdmin });
   registerChatsRoutes(app, { supabaseAdmin });

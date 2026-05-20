@@ -3,6 +3,48 @@ import type { SupabaseClient, User as AuthUser } from '@supabase/supabase-js';
 import { prismaClient as prisma } from '../db.js';
 import { z } from 'zod';
 import { requireAuthenticatedUser } from '../auth.js';
+import { requireAppUser } from '../requireAppUser.js';
+import { removeStorageObjectForUrl, validatePhotoUrl } from '../services/userPhotoStorage.js';
+
+export const MAX_PHOTOS_PER_USER = 6;
+const MAX_PHOTO_URL_LENGTH = 2048;
+
+const photoUrlSchema = z.string().url('url must be a valid URL').max(MAX_PHOTO_URL_LENGTH);
+
+const createPhotoBody = z.object({
+  url: photoUrlSchema,
+  position: z.number().int().min(0).max(MAX_PHOTOS_PER_USER - 1).optional(),
+});
+
+const reorderPhotosBody = z.object({
+  photoIds: z.array(z.string().uuid()).min(1).max(MAX_PHOTOS_PER_USER),
+});
+
+const photoIdParam = z.object({ id: z.string().uuid() });
+
+type PhotoDto = {
+  id: string;
+  url: string;
+  position: number;
+};
+
+async function listUserPhotos(appUserId: string): Promise<PhotoDto[]> {
+  const rows = await prisma.userPhoto.findMany({
+    where: { userId: appUserId },
+    orderBy: { position: 'asc' },
+    select: { id: true, url: true, position: true },
+  });
+  return rows.map(r => ({ id: r.id, url: r.url, position: r.position }));
+}
+
+async function nextPhotoPosition(appUserId: string): Promise<number> {
+  const last = await prisma.userPhoto.findFirst({
+    where: { userId: appUserId },
+    orderBy: { position: 'desc' },
+    select: { position: true },
+  });
+  return last ? last.position + 1 : 0;
+}
 
 export const usernameSchema = z
   .string()
@@ -13,6 +55,16 @@ export const usernameSchema = z
 const displayNameSchema = z
   .string()
   .max(80, 'Display name must be at most 80 characters')
+  .transform(s => {
+    const t = s.trim();
+    return t.length === 0 ? null : t;
+  });
+
+export const MAX_BIO_LENGTH = 500;
+
+const bioSchema = z
+  .string()
+  .max(MAX_BIO_LENGTH, `Bio must be at most ${MAX_BIO_LENGTH} characters`)
   .transform(s => {
     const t = s.trim();
     return t.length === 0 ? null : t;
@@ -34,14 +86,29 @@ const patchProfileBody = z
   .object({
     username: z.union([usernameSchema, z.null()]).optional(),
     displayName: z.union([displayNameSchema, z.null()]).optional(),
+    bio: z.union([bioSchema, z.null()]).optional(),
     geoLocation: geoLocationSchema.optional(),
   })
-  .refine(data => data.username !== undefined || data.displayName !== undefined, {
-    message: 'Provide at least one of username or displayName',
-  });
+  .refine(
+    data =>
+      data.username !== undefined ||
+      data.displayName !== undefined ||
+      data.bio !== undefined ||
+      data.geoLocation !== undefined,
+    {
+      message: 'Provide at least one of username, displayName, bio, or geoLocation',
+    },
+  );
 
 export type ProfileRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
+  /**
+   * Public origin of the Supabase project (matches `SUPABASE_URL`).
+   * Used to verify that registered photo URLs point at this project's `user-photos`
+   * bucket and live under the signed-in user's folder. When null, URL validation
+   * is skipped (legacy/test mode).
+   */
+  supabaseUrl: string | null;
 };
 
 export async function resolveAppUser(authUser: AuthUser) {
@@ -72,7 +139,7 @@ function isPrismaUniqueViolation(e: unknown): e is { code: string; meta?: { targ
 }
 
 export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDeps) {
-  const { supabaseAdmin } = deps;
+  const { supabaseAdmin, supabaseUrl } = deps;
 
   app.get('/profile', async (req, reply) => {
     const authUser = await requireAuthenticatedUser(req, reply, supabaseAdmin);
@@ -81,6 +148,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
     const row = await resolveAppUser(authUser);
 
     let savedLocation: string | null = null;
+    let photos: PhotoDto[] = [];
     if (row) {
       try {
         const r =
@@ -91,6 +159,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       } catch (err) {
         req.log.warn(err, 'Failed to read saved location');
       }
+      photos = await listUserPhotos(row.id);
     }
 
     return reply.send({
@@ -99,7 +168,9 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       appUserId: row?.id ?? null,
       username: row?.username ?? null,
       displayName: row?.displayName ?? null,
+      bio: row?.bio ?? null,
       savedLocation,
+      photos,
     });
   });
 
@@ -120,7 +191,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       });
     }
 
-    const { username, displayName, geoLocation } = parsed.data;
+    const { username, displayName, bio, geoLocation } = parsed.data;
 
     try {
       let row = await resolveAppUser(authUser);
@@ -132,6 +203,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
             email,
             ...(username !== undefined && { username }),
             ...(displayName !== undefined && { displayName: displayName }),
+            ...(bio !== undefined && { bio }),
           },
         });
       } else {
@@ -140,6 +212,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
           data: {
             ...(username !== undefined && { username }),
             ...(displayName !== undefined && { displayName: displayName }),
+            ...(bio !== undefined && { bio }),
             email,
           },
         });
@@ -187,11 +260,19 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
           req.log.warn(err, 'Failed to resolve nearest city');
         }
 
-        // Persist the location into PostGIS geography column via raw SQL.
+        // Snap coordinates to a ~1.1 km grid (2 decimal places) BEFORE storing.
+        // This is a privacy mitigation: the precise device location is never
+        // persisted, so even an attacker with direct DB access can't recover
+        // it, and distance computations between any two users are quantized
+        // to the same grid. Combined with the API-side bucketing in
+        // `distanceBuckets.ts`, this defeats trilateration via Discover.
+        const snappedLat = snapCoordinate(geoLocation.latitude);
+        const snappedLng = snapCoordinate(geoLocation.longitude);
+
         try {
           await prisma.$executeRaw`
             INSERT INTO "UserLocation" ("userId","location","friendlyName")
-            VALUES (${row.id}, ST_SetSRID(ST_MakePoint(${geoLocation.longitude}, ${geoLocation.latitude}), 4326), ${cityName})
+            VALUES (${row.id}, ST_SetSRID(ST_MakePoint(${snappedLng}, ${snappedLat}), 4326), ${cityName})
             ON CONFLICT ("userId") DO UPDATE
             SET location = EXCLUDED.location,
                 "friendlyName" = EXCLUDED."friendlyName",
@@ -202,13 +283,17 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         }
       }
 
+      const photos = await listUserPhotos(row.id);
+
       return reply.send({
         supabaseUserId: authUser.id,
         email,
         appUserId: row.id,
         username: row.username ?? null,
         displayName: row.displayName ?? null,
+        bio: row.bio ?? null,
         savedLocation: cityName,
+        photos,
       });
     } catch (e: unknown) {
       if (isPrismaUniqueViolation(e)) {
@@ -223,6 +308,154 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       return reply.status(500).send({ error: 'Failed to update profile' });
     }
   });
+
+  app.get('/me/photos', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const photos = await listUserPhotos(row.id);
+    return reply.send({ photos });
+  });
+
+  app.post('/me/photos', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const parsed = createPhotoBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: 'Invalid body',
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+
+    if (!row.supabaseAuthId) {
+      return reply.status(400).send({
+        error: 'Your profile is missing a Supabase auth id; sign out and back in to refresh it.',
+      });
+    }
+
+    const urlCheck = validatePhotoUrl(parsed.data.url, supabaseUrl, row.supabaseAuthId);
+    if (!urlCheck.ok) {
+      return reply.status(400).send({ error: urlCheck.error });
+    }
+
+    const existingCount = await prisma.userPhoto.count({ where: { userId: row.id } });
+    if (existingCount >= MAX_PHOTOS_PER_USER) {
+      return reply.status(400).send({
+        error: `You can have at most ${MAX_PHOTOS_PER_USER} photos`,
+      });
+    }
+
+    const position = parsed.data.position ?? (await nextPhotoPosition(row.id));
+
+    try {
+      const created = await prisma.userPhoto.create({
+        data: {
+          userId: row.id,
+          url: parsed.data.url,
+          position,
+        },
+        select: { id: true, url: true, position: true },
+      });
+      return reply.status(201).send({ photo: created });
+    } catch (err: unknown) {
+      if (isPrismaUniqueViolation(err)) {
+        return reply.status(409).send({
+          error: 'Another photo already occupies that position. Reorder photos first.',
+        });
+      }
+      req.log.error(err, 'Failed to create photo');
+      return reply.status(500).send({ error: 'Failed to create photo' });
+    }
+  });
+
+  app.delete('/me/photos/:id', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const parsed = photoIdParam.safeParse(req.params);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid id' });
+    }
+
+    const existing = await prisma.userPhoto.findFirst({
+      where: { id: parsed.data.id, userId: row.id },
+    });
+    if (!existing) {
+      return reply.status(404).send({ error: 'Photo not found' });
+    }
+
+    await prisma.userPhoto.delete({ where: { id: existing.id } });
+
+    // Best-effort: drop the backing storage object so we don't leak bytes.
+    // The row is gone regardless of what storage does.
+    const cleanup = await removeStorageObjectForUrl(existing.url, supabaseAdmin);
+    if (!cleanup.ok) {
+      req.log.warn(
+        { photoId: existing.id, reason: cleanup.reason },
+        'Failed to delete storage object for photo',
+      );
+    }
+
+    return reply.status(204).send();
+  });
+
+  app.put('/me/photos/order', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const parsed = reorderPhotosBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: 'Invalid body',
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+
+    const ids = parsed.data.photoIds;
+    const owned = await prisma.userPhoto.findMany({
+      where: { userId: row.id },
+      select: { id: true },
+    });
+    const ownedSet = new Set(owned.map(p => p.id));
+    if (ids.length !== owned.length || !ids.every(id => ownedSet.has(id))) {
+      return reply.status(400).send({
+        error: 'photoIds must contain exactly your current photos with no duplicates',
+      });
+    }
+
+    // Two-phase reorder so we never violate the @@unique([userId, position]) index.
+    // First push every photo to a negative slot (-1, -2, ...), then assign final positions.
+    await prisma.$transaction(async tx => {
+      for (let i = 0; i < ids.length; i += 1) {
+        await tx.userPhoto.update({
+          where: { id: ids[i]! },
+          data: { position: -(i + 1) },
+        });
+      }
+      for (let i = 0; i < ids.length; i += 1) {
+        await tx.userPhoto.update({
+          where: { id: ids[i]! },
+          data: { position: i },
+        });
+      }
+    });
+
+    const photos = await listUserPhotos(row.id);
+    return reply.send({ photos });
+  });
+}
+
+/**
+ * Snap a coordinate to a fixed decimal precision to coarsen stored locations.
+ * 2 decimal places ≈ a 1.1 km grid at the equator, finer toward the poles —
+ * sufficient to defeat trilateration to building level while still allowing
+ * "within N miles" buckets to look natural to users.
+ */
+function snapCoordinate(value: number, decimals = 2): number {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
 }
 
 async function nearestCity(
