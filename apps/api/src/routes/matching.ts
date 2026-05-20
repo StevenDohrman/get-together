@@ -74,8 +74,8 @@ export function registerMatchingRoutes(app: FastifyInstance, deps: MatchingRoute
     }
 
     const limit = parsed.data.limit ?? 30;
-    const users = await getDiscoveryUsers(row.id, limit);
-    return reply.send({ users });
+    const result = await getDiscoveryUsers(row.id, limit);
+    return reply.send(result);
   });
 
   app.post('/matching/swipes', async (req, reply) => {

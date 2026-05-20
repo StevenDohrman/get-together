@@ -25,7 +25,17 @@ type DbUser = {
   email: string;
   username: string | null;
   displayName: string | null;
+  bio?: string | null;
   supabaseAuthId?: string | null;
+};
+
+type DbUserPhoto = {
+  id: string;
+  userId: string;
+  url: string;
+  position: number;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type State = {
@@ -82,6 +92,7 @@ type State = {
     userId: string;
     joinedAt: Date;
   }[];
+  userPhotos: DbUserPhoto[];
   calls: {
     swipeUpserts: unknown[];
     seekingCreates: unknown[];
@@ -144,7 +155,7 @@ function resetState() {
   const now = new Date('2026-05-15T12:00:00.000Z');
   state = {
     users: [
-      { id: ME, email: 'me@example.com', username: 'me', displayName: 'Me' },
+      { id: ME, email: 'me@example.com', username: 'me', displayName: 'Me', supabaseAuthId: ME },
       { id: USER_A, email: 'a@example.com', username: 'user-a', displayName: 'User A' },
       { id: USER_B, email: 'b@example.com', username: 'user-b', displayName: 'User B' },
       { id: USER_C, email: 'c@example.com', username: 'user-c', displayName: 'User C' },
@@ -164,6 +175,7 @@ function resetState() {
     groupMemberships: [],
     groupChats: [],
     groupChatMembers: [],
+    userPhotos: [],
     calls: {
       swipeUpserts: [],
       seekingCreates: [],
@@ -220,7 +232,12 @@ const prisma = {
     findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
       state.users
         .filter(u => where.id.in.includes(u.id))
-        .map(u => ({ id: u.id, username: u.username, displayName: u.displayName })),
+        .map(u => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.displayName,
+          bio: u.bio ?? null,
+        })),
   },
   userInterest: {
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
@@ -266,6 +283,8 @@ const prisma = {
   interest: {
     count: async ({ where }: { where: { id: { in: string[] } } }) =>
       state.interests.filter(i => where.id.in.includes(i.id)).length,
+    findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+      state.interests.filter(i => where.id.in.includes(i.id)),
   },
   userGroupSeeking: {
     count: async ({ where }: { where: { userId: string } }) =>
@@ -297,7 +316,15 @@ const prisma = {
           if (where.userId && typeof where.userId === 'object' && 'in' in where.userId) {
             if (!(where.userId.in as string[]).includes(row.userId)) return false;
           }
-          if (where.targetGroupSize && row.targetGroupSize !== where.targetGroupSize) return false;
+          if (where.userId && typeof where.userId === 'object' && 'notIn' in where.userId) {
+            if ((where.userId.notIn as string[]).includes(row.userId)) return false;
+          }
+          if (where.targetGroupSize && typeof where.targetGroupSize === 'number') {
+            if (row.targetGroupSize !== where.targetGroupSize) return false;
+          }
+          if (where.targetGroupSize && typeof where.targetGroupSize === 'object' && 'in' in where.targetGroupSize) {
+            if (!(where.targetGroupSize.in as number[]).includes(row.targetGroupSize)) return false;
+          }
           return true;
         })
         .map(seekingWithInterests),
@@ -494,6 +521,92 @@ const prisma = {
           };
         }),
   },
+  userPhoto: {
+    findMany: async ({
+      where,
+      orderBy,
+    }: {
+      where?: { userId?: string | { in: string[] } };
+      orderBy?: { position?: 'asc' | 'desc' };
+    }) => {
+      let rows = state.userPhotos.slice();
+      if (where?.userId) {
+        if (typeof where.userId === 'string') {
+          const target = where.userId;
+          rows = rows.filter(p => p.userId === target);
+        } else if ('in' in where.userId) {
+          const ids = where.userId.in;
+          rows = rows.filter(p => ids.includes(p.userId));
+        }
+      }
+      if (orderBy?.position) {
+        const dir = orderBy.position === 'asc' ? 1 : -1;
+        rows = rows.sort((a, b) => (a.position - b.position) * dir);
+      }
+      return rows;
+    },
+    findFirst: async ({
+      where,
+      orderBy,
+    }: {
+      where: { userId?: string; id?: string };
+      orderBy?: { position?: 'asc' | 'desc' };
+    }) => {
+      let rows = state.userPhotos.slice();
+      if (where.userId) rows = rows.filter(p => p.userId === where.userId);
+      if (where.id) rows = rows.filter(p => p.id === where.id);
+      if (orderBy?.position) {
+        const dir = orderBy.position === 'asc' ? 1 : -1;
+        rows = rows.sort((a, b) => (a.position - b.position) * dir);
+      }
+      return rows[0] ?? null;
+    },
+    count: async ({ where }: { where: { userId: string } }) =>
+      state.userPhotos.filter(p => p.userId === where.userId).length,
+    create: async ({ data }: { data: { userId: string; url: string; position: number } }) => {
+      const dupe = state.userPhotos.find(
+        p => p.userId === data.userId && p.position === data.position,
+      );
+      if (dupe) {
+        const err = new Error('Unique constraint failed') as Error & {
+          code: string;
+          meta: { target: string[] };
+        };
+        err.code = 'P2002';
+        err.meta = { target: ['userId', 'position'] };
+        throw err;
+      }
+      const row: DbUserPhoto = {
+        id: `70000000-0000-4000-8000-${String(state.userPhotos.length + 1).padStart(12, '0')}`,
+        userId: data.userId,
+        url: data.url,
+        position: data.position,
+        createdAt: new Date('2026-05-19T23:00:00.000Z'),
+        updatedAt: new Date('2026-05-19T23:00:00.000Z'),
+      };
+      state.userPhotos.push(row);
+      return row;
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { url?: string; position?: number };
+    }) => {
+      const row = state.userPhotos.find(p => p.id === where.id);
+      if (!row) throw new Error(`Missing photo ${where.id}`);
+      if (data.url !== undefined) row.url = data.url;
+      if (data.position !== undefined) row.position = data.position;
+      row.updatedAt = new Date('2026-05-19T23:30:00.000Z');
+      return row;
+    },
+    delete: async ({ where }: { where: { id: string } }) => {
+      const before = state.userPhotos.length;
+      state.userPhotos = state.userPhotos.filter(p => p.id !== where.id);
+      if (state.userPhotos.length === before) throw new Error(`Missing photo ${where.id}`);
+    },
+  },
   $transaction: async <T>(fn: (tx: typeof prisma) => Promise<T>) => fn(prisma),
 };
 
@@ -503,12 +616,18 @@ process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@127.0.0.1:5432/ucon
 const { setPrismaClientForTests } = await import('../src/db.js');
 const { registerMatchingRoutes } = await import('../src/routes/matching.js');
 const { registerGroupsRoutes } = await import('../src/routes/groups.js');
+const { registerProfileRoutes } = await import('../src/routes/profile.js');
 
 setPrismaClientForTests(prisma as never);
 
 function authHeaders() {
   return { authorization: 'Bearer good-token' };
 }
+
+const SUPABASE_URL = 'https://test-project.supabase.co';
+
+type StorageRemoveCall = { bucket: string; paths: string[] };
+const storageRemoveCalls: StorageRemoveCall[] = [];
 
 function supabaseAdmin() {
   return {
@@ -518,22 +637,56 @@ function supabaseAdmin() {
         error: token === 'good-token' ? null : new Error('bad token'),
       }),
     },
+    storage: {
+      from: (bucket: string) => ({
+        remove: async (paths: string[]) => {
+          storageRemoveCalls.push({ bucket, paths });
+          return { data: paths.map(p => ({ name: p })), error: null };
+        },
+      }),
+    },
   };
 }
 
-function makeApp() {
+function makeApp(opts: { supabaseUrl?: string | null } = {}) {
   const app = Fastify({ logger: false });
+  const supabaseUrl = opts.supabaseUrl === undefined ? SUPABASE_URL : opts.supabaseUrl;
   registerMatchingRoutes(app, { supabaseAdmin: supabaseAdmin() as never });
   registerGroupsRoutes(app, { supabaseAdmin: supabaseAdmin() as never });
+  registerProfileRoutes(app, { supabaseAdmin: supabaseAdmin() as never, supabaseUrl });
   return app;
+}
+
+function userPhotosUrl(authId: string, file: string): string {
+  return `${SUPABASE_URL}/storage/v1/object/public/user-photos/${authId}/${file}`;
 }
 
 beforeEach(() => {
   resetState();
+  storageRemoveCalls.length = 0;
 });
 
 describe('matching APIs', () => {
-  it('returns only unswiped discovery users ranked by normalized shared-interest weights', async () => {
+  it('returns NO_SEEKINGS when the signed-in user has no group seekings', async () => {
+    state.groupSeekings = [];
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 5 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 9 },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/matching/discovery',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().reason, 'NO_SEEKINGS');
+    assert.deepEqual(response.json().users, []);
+  });
+
+  it('ranks only users with a same-size group seeking that shares at least one interest with mine', async () => {
+    // ME already has SEEKING_ID with targetGroupSize=3, interests A+B.
     state.userInterests.push(
       { userId: ME, interestId: INTEREST_A, weight: 3 },
       { userId: ME, interestId: INTEREST_B, weight: 4 },
@@ -544,7 +697,120 @@ describe('matching APIs', () => {
       { userId: USER_C, interestId: INTEREST_C, weight: 10 },
       { userId: USER_D, interestId: INTEREST_C, weight: 10 },
     );
-    state.swipes.push({ swiperId: ME, targetUserId: USER_D, decision: SwipeDecision.NO });
+    // USER_A, USER_B, USER_C all share at least one seeking interest with ME via a same-size (3) seeking.
+    state.groupSeekings.push(
+      {
+        id: '20000000-0000-4000-8000-000000000002',
+        userId: USER_A,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '20000000-0000-4000-8000-000000000003',
+        userId: USER_B,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A, INTEREST_B],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '20000000-0000-4000-8000-000000000004',
+        userId: USER_C,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_B],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // USER_D has a seeking but the size doesn't match, so they must be excluded.
+      {
+        id: '20000000-0000-4000-8000-000000000005',
+        userId: USER_D,
+        targetGroupSize: 4,
+        interestIds: [INTEREST_A, INTEREST_B],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/matching/discovery',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().reason, 'COMPATIBLE_SEEKINGS');
+    assert.deepEqual(
+      response
+        .json()
+        .users.map((u: { id: string; sharedInterestCount: number; matchScore: number; matchedGroupSize: number | null }) => [
+          u.id,
+          u.sharedInterestCount,
+          Math.round(u.matchScore * 1000) / 1000,
+          u.matchedGroupSize,
+        ]),
+      [
+        [USER_B, 2, 0.996, 3],
+        [USER_A, 1, 0.6, 3],
+        [USER_C, 1, 0.566, 3],
+      ],
+    );
+  });
+
+  it('falls back to profile-interest matching when no peer seekings line up', async () => {
+    // ME has seekings but no other user has a matching-size + interest-overlap seeking.
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 3 },
+      { userId: ME, interestId: INTEREST_B, weight: 4 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 10 },
+      { userId: USER_B, interestId: INTEREST_B, weight: 9 },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/matching/discovery',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().reason, 'PROFILE_FALLBACK');
+    const users = response.json().users as Array<{ id: string; matchedGroupSize: number | null }>;
+    assert.deepEqual(
+      users.map(u => [u.id, u.matchedGroupSize]).sort(),
+      [
+        [USER_A, null],
+        [USER_B, null],
+      ].sort(),
+    );
+  });
+
+  it('excludes users I have already swiped on from discovery', async () => {
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 5 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 8 },
+      { userId: USER_B, interestId: INTEREST_A, weight: 8 },
+    );
+    state.groupSeekings.push(
+      {
+        id: '20000000-0000-4000-8000-000000000002',
+        userId: USER_A,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '20000000-0000-4000-8000-000000000003',
+        userId: USER_B,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+    state.swipes.push({ swiperId: ME, targetUserId: USER_A, decision: SwipeDecision.NO });
 
     const response = await makeApp().inject({
       method: 'GET',
@@ -554,19 +820,8 @@ describe('matching APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(
-      response
-        .json()
-        .users.map((u: { id: string; sharedInterestCount: number; matchScore: number; rawMatchScore: number }) => [
-          u.id,
-          u.sharedInterestCount,
-          Math.round(u.matchScore * 1000) / 1000,
-          u.rawMatchScore,
-        ]),
-      [
-        [USER_B, 2, 0.996, 67],
-        [USER_A, 1, 0.6, 30],
-        [USER_C, 1, 0.566, 40],
-      ],
+      (response.json().users as { id: string }[]).map(u => u.id),
+      [USER_B],
     );
   });
 
@@ -832,6 +1087,64 @@ describe('matching APIs', () => {
     );
   });
 
+  it('surfaces bio and photo URLs on discovery cards', async () => {
+    state.users[1] = { ...state.users[1], bio: 'Coffee, books, long walks.' };
+    state.userPhotos.push(
+      {
+        id: '70000000-0000-4000-8000-000000000010',
+        userId: USER_A,
+        url: 'https://cdn.example.com/a/main.jpg',
+        position: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '70000000-0000-4000-8000-000000000011',
+        userId: USER_A,
+        url: 'https://cdn.example.com/a/second.jpg',
+        position: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 5 },
+      { userId: USER_A, interestId: INTEREST_A, weight: 8 },
+    );
+    state.groupSeekings.push({
+      id: '20000000-0000-4000-8000-000000000099',
+      userId: USER_A,
+      targetGroupSize: 3,
+      interestIds: [INTEREST_A],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/matching/discovery',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    const user = (response.json().users as Array<{
+      id: string;
+      bio: string | null;
+      avatarUrl: string | null;
+      photos: { url: string; position: number }[];
+    }>).find(u => u.id === USER_A);
+    assert.ok(user, 'USER_A should be in the discovery result');
+    assert.equal(user.bio, 'Coffee, books, long walks.');
+    assert.equal(user.avatarUrl, 'https://cdn.example.com/a/main.jpg');
+    assert.deepEqual(
+      user.photos.map(p => [p.position, p.url]),
+      [
+        [0, 'https://cdn.example.com/a/main.jpg'],
+        [1, 'https://cdn.example.com/a/second.jpg'],
+      ],
+    );
+  });
+
   it('returns dashboard sections for seekings and pending formations', async () => {
     state.formationProposals.push({
       id: PROPOSAL_ID,
@@ -860,6 +1173,269 @@ describe('matching APIs', () => {
     assert.equal(response.json().groupSeekings.length, 1);
     assert.equal(response.json().invitesPendingMyAnswer.length, 1);
     assert.equal(response.json().invitesPendingMyAnswer[0].proposal.id, PROPOSAL_ID);
+  });
+});
+
+describe('photo deck APIs', () => {
+  it('lists my photos ordered by position', async () => {
+    state.userPhotos.push(
+      {
+        id: '70000000-0000-4000-8000-000000000001',
+        userId: ME,
+        url: 'https://cdn.example.com/me/2.jpg',
+        position: 2,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '70000000-0000-4000-8000-000000000002',
+        userId: ME,
+        url: 'https://cdn.example.com/me/0.jpg',
+        position: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '70000000-0000-4000-8000-000000000003',
+        userId: ME,
+        url: 'https://cdn.example.com/me/1.jpg',
+        position: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/me/photos',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      (response.json().photos as { position: number }[]).map(p => p.position),
+      [0, 1, 2],
+    );
+  });
+
+  it('creates a photo and auto-positions it after existing photos', async () => {
+    state.userPhotos.push({
+      id: '70000000-0000-4000-8000-000000000050',
+      userId: ME,
+      url: userPhotosUrl(ME, 'old.jpg'),
+      position: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: userPhotosUrl(ME, 'new.jpg') },
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(response.json().photo.position, 1);
+    assert.equal(state.userPhotos.length, 2);
+  });
+
+  it('rejects creating more than the per-user photo cap', async () => {
+    for (let i = 0; i < 6; i += 1) {
+      state.userPhotos.push({
+        id: `70000000-0000-4000-8000-${String(i + 100).padStart(12, '0')}`,
+        userId: ME,
+        url: userPhotosUrl(ME, `${i}.jpg`),
+        position: i,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: userPhotosUrl(ME, 'extra.jpg') },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /at most 6 photos/);
+  });
+
+  it('rejects malformed photo URL bodies', async () => {
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: 'not-a-url' },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().error, 'Invalid body');
+  });
+
+  it('rejects photo URLs that do not point at the configured Supabase host', async () => {
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: 'https://attacker.example.com/storage/v1/object/public/user-photos/' + ME + '/x.jpg' },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /Supabase Storage/);
+  });
+
+  it('rejects photo URLs that live in another user\'s storage folder', async () => {
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: userPhotosUrl(USER_A, 'stolen.jpg') },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /your own storage folder/);
+  });
+
+  it('rejects photo URLs that reference a different bucket', async () => {
+    const response = await makeApp().inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: `${SUPABASE_URL}/storage/v1/object/public/avatars/${ME}/x.jpg` },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /user-photos bucket/);
+  });
+
+  it('skips URL validation when supabaseUrl is not configured (legacy mode)', async () => {
+    const response = await makeApp({ supabaseUrl: null }).inject({
+      method: 'POST',
+      url: '/me/photos',
+      headers: authHeaders(),
+      payload: { url: 'https://cdn.example.com/me/new.jpg' },
+    });
+
+    assert.equal(response.statusCode, 201);
+  });
+
+  it('deletes a photo I own, drops the backing storage object, and returns 404 for one I do not', async () => {
+    state.userPhotos.push({
+      id: '70000000-0000-4000-8000-000000000200',
+      userId: ME,
+      url: userPhotosUrl(ME, 'x.jpg'),
+      position: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    state.userPhotos.push({
+      id: '70000000-0000-4000-8000-000000000201',
+      userId: USER_A,
+      url: userPhotosUrl(USER_A, 'x.jpg'),
+      position: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const okResp = await makeApp().inject({
+      method: 'DELETE',
+      url: '/me/photos/70000000-0000-4000-8000-000000000200',
+      headers: authHeaders(),
+    });
+    assert.equal(okResp.statusCode, 204);
+    assert.equal(state.userPhotos.length, 1);
+    assert.deepEqual(storageRemoveCalls, [
+      { bucket: 'user-photos', paths: [`${ME}/x.jpg`] },
+    ]);
+
+    const notMineResp = await makeApp().inject({
+      method: 'DELETE',
+      url: '/me/photos/70000000-0000-4000-8000-000000000201',
+      headers: authHeaders(),
+    });
+    assert.equal(notMineResp.statusCode, 404);
+    assert.equal(storageRemoveCalls.length, 1, 'no storage call for a 404 delete');
+  });
+
+  it('reorders my photos according to the provided id list', async () => {
+    state.userPhotos.push(
+      {
+        id: '70000000-0000-4000-8000-000000000300',
+        userId: ME,
+        url: 'https://cdn.example.com/me/a.jpg',
+        position: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '70000000-0000-4000-8000-000000000301',
+        userId: ME,
+        url: 'https://cdn.example.com/me/b.jpg',
+        position: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '70000000-0000-4000-8000-000000000302',
+        userId: ME,
+        url: 'https://cdn.example.com/me/c.jpg',
+        position: 2,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'PUT',
+      url: '/me/photos/order',
+      headers: authHeaders(),
+      payload: {
+        photoIds: [
+          '70000000-0000-4000-8000-000000000302',
+          '70000000-0000-4000-8000-000000000300',
+          '70000000-0000-4000-8000-000000000301',
+        ],
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      (response.json().photos as { id: string; position: number }[]).map(p => [p.id, p.position]),
+      [
+        ['70000000-0000-4000-8000-000000000302', 0],
+        ['70000000-0000-4000-8000-000000000300', 1],
+        ['70000000-0000-4000-8000-000000000301', 2],
+      ],
+    );
+  });
+
+  it('rejects reorder payloads that do not match my current photos', async () => {
+    state.userPhotos.push({
+      id: '70000000-0000-4000-8000-000000000400',
+      userId: ME,
+      url: 'https://cdn.example.com/me/a.jpg',
+      position: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await makeApp().inject({
+      method: 'PUT',
+      url: '/me/photos/order',
+      headers: authHeaders(),
+      payload: {
+        photoIds: [
+          '70000000-0000-4000-8000-000000000400',
+          '70000000-0000-4000-8000-000000000401',
+        ],
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /exactly your current photos/);
   });
 });
 

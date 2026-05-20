@@ -4,6 +4,13 @@ import { apiJson } from '@/lib/api';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useInterests } from '@/lib/hooks/useInterests';
+import { usePhotos, MAX_PHOTOS } from '@/lib/hooks/usePhotos';
+import DashboardLayout from '@/components/DashboardLayout';
+import {
+  ALLOWED_PHOTO_MIME_TYPES,
+  MAX_PHOTO_BYTES,
+  uploadUserPhoto,
+} from '@/lib/uploadUserPhoto';
 
 type ProfilePayload = {
   supabaseUserId: string;
@@ -11,8 +18,11 @@ type ProfilePayload = {
   appUserId: string | null;
   username: string | null;
   displayName: string | null;
+  bio: string | null;
   savedLocation: string | null;
 };
+
+const MAX_BIO_LENGTH = 500;
 
 type Interest = {
   id: string;
@@ -57,6 +67,7 @@ function parseProfile(payload: unknown): ProfilePayload | null {
     appUserId: typeof payload.appUserId === 'string' ? payload.appUserId : null,
     username: optString(payload.username),
     displayName: optString(payload.displayName),
+    bio: optString(payload.bio),
     savedLocation: optString(payload.savedLocation),
   };
 }
@@ -110,8 +121,21 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
   const [locationName, setLocationName] = useState('');
   const [saving, setSaving] = useState(false);
+  const {
+    photos,
+    loading: photosLoading,
+    error: photosError,
+    busy: photosBusy,
+    add: addPhoto,
+    remove: removePhoto,
+    reorder: reorderPhotos,
+  } = usePhotos();
+  const [photoFormError, setPhotoFormError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const photoFileInputRef = useRef<HTMLInputElement | null>(null);
   const {
     catalog,
     selectedInterests,
@@ -223,6 +247,7 @@ export default function ProfilePage() {
         setProfile(parsed);
         setUsername(parsed.username ?? '');
         setDisplayName(parsed.displayName ?? '');
+        setBio(parsed.bio ?? '');
         setLocationName(parsed.savedLocation ?? '');
         setLoading(false);
         // Trigger interests hook to (re)fetch using current auth token
@@ -266,6 +291,12 @@ export default function ProfilePage() {
       return;
     }
 
+    const nextBio = bio.trim();
+    if (nextBio.length > MAX_BIO_LENGTH) {
+      setError(`Bio must be at most ${MAX_BIO_LENGTH} characters.`);
+      return;
+    }
+
     setSaving(true);
     try {
       const { data: sessionData } = await getSupabase().auth.getSession();
@@ -275,10 +306,12 @@ export default function ProfilePage() {
       const payload: {
         username: string | null;
         displayName: string | null;
+        bio: string | null;
         geoLocation?: GeolocationCoordinates | null;
       } = {
         username: nextUsername.length === 0 ? null : nextUsername,
         displayName: nextDisplay.length === 0 ? null : nextDisplay,
+        bio: nextBio.length === 0 ? null : nextBio,
       };
 
       if (nextGeoLocation !== undefined) {
@@ -292,6 +325,7 @@ export default function ProfilePage() {
       setProfile(updated);
       setUsername(updated.username ?? '');
       setDisplayName(updated.displayName ?? '');
+      setBio(updated.bio ?? '');
       setLocationName(updated.savedLocation ?? '');
 
       await getSupabase().auth.refreshSession();
@@ -308,51 +342,53 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-16 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
-        <div className="text-sm text-zinc-600 dark:text-zinc-400">
-          Loading profile…
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center">
+          <div className="text-sm text-zinc-400">Loading profile…</div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   if (!profile && !error) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-16 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
-        <div className="w-full max-w-md rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
-          <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-            Profile
-          </h1>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            You’re not signed in.
-          </p>
-          <a
-            className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-            href="/auth"
-          >
-            Go to sign in
-          </a>
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl border border-white/12 bg-white/5 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] backdrop-blur">
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
+              Profile
+            </h1>
+            <p className="mt-2 text-sm text-zinc-400">You’re not signed in.</p>
+            <a
+              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-zinc-50 px-4 text-sm font-medium text-black transition-colors hover:bg-white"
+              href="/auth"
+            >
+              Go to sign in
+            </a>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   if (!profile && error) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-16 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
-        <div className="w-full max-w-md rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
-          <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-            Profile
-          </h1>
-          <p className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>
-          <a
-            className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl border border-black/8 px-4 text-sm font-medium text-black dark:border-white/12 dark:text-zinc-50"
-            href="/auth"
-          >
-            Back to sign in
-          </a>
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl border border-white/12 bg-white/5 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] backdrop-blur">
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
+              Profile
+            </h1>
+            <p className="mt-2 text-sm text-red-300">{error}</p>
+            <a
+              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl border border-white/12 px-4 text-sm font-medium text-zinc-50"
+              href="/auth"
+            >
+              Back to sign in
+            </a>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
@@ -361,8 +397,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex flex-1 justify-center bg-[radial-gradient(circle_at_top,#f4efe8,transparent_42%),linear-gradient(180deg,#fbf8f3_0%,#f5f1ea_100%)] px-6 py-10 text-zinc-900 dark:bg-[radial-gradient(circle_at_top,#202124,transparent_42%),linear-gradient(180deg,#0f1012_0%,#090a0c_100%)] dark:text-zinc-50">
-      <div className="w-full max-w-5xl space-y-6">
+    <DashboardLayout>
+      <div className="mx-auto w-full max-w-5xl space-y-6 text-zinc-50">
         <div className="rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-2xl">
@@ -411,6 +447,33 @@ export default function ProfilePage() {
                 />
                 <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                   Optional. Does not need to be unique.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label
+                    className="text-sm font-medium text-black dark:text-zinc-50"
+                    htmlFor="bio"
+                  >
+                    Bio
+                  </label>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {bio.length}/{MAX_BIO_LENGTH}
+                  </span>
+                </div>
+                <textarea
+                  id="bio"
+                  rows={4}
+                  maxLength={MAX_BIO_LENGTH}
+                  className="mt-2 w-full rounded-2xl border border-black/8 bg-white px-4 py-3 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  disabled={saving}
+                  placeholder="Tell people a bit about you. What are you into?"
+                />
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  Optional. Shown on your Discover card.
                 </p>
               </div>
 
@@ -510,6 +573,152 @@ export default function ProfilePage() {
                 {info}
               </div>
             ) : null}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
+              Photo deck
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
+              Your photo slides
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              Add up to {MAX_PHOTOS} photos. The first photo is the one shown on
+              your Discover card. JPEG, PNG, or WebP up to {Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB each.
+            </p>
+            {photosError ? (
+              <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+                {photosError}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-5">
+            <input
+              ref={photoFileInputRef}
+              type="file"
+              accept={ALLOWED_PHOTO_MIME_TYPES.join(',')}
+              className="sr-only"
+              disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (e.target) e.target.value = '';
+                if (!file) return;
+                setPhotoFormError(null);
+                if (photos.length >= MAX_PHOTOS) {
+                  setPhotoFormError(`You already have ${MAX_PHOTOS} photos.`);
+                  return;
+                }
+                setUploading(true);
+                try {
+                  const { publicUrl } = await uploadUserPhoto(file);
+                  await addPhoto(publicUrl);
+                } catch (err) {
+                  setPhotoFormError(
+                    err instanceof Error ? err.message : 'Failed to upload photo',
+                  );
+                } finally {
+                  setUploading(false);
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => photoFileInputRef.current?.click()}
+              disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
+              className="inline-flex h-12 items-center justify-center rounded-2xl bg-black px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
+            >
+              {uploading
+                ? 'Uploading…'
+                : photos.length >= MAX_PHOTOS
+                  ? `Photo deck full (${MAX_PHOTOS}/${MAX_PHOTOS})`
+                  : `Upload photo (${photos.length}/${MAX_PHOTOS})`}
+            </button>
+          </div>
+          {photoFormError ? (
+            <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+              {photoFormError}
+            </p>
+          ) : null}
+
+          <div className="mt-5">
+            {photosLoading ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Loading photos…
+              </p>
+            ) : photos.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400">
+                No photos yet. Add one above to start your deck.
+              </div>
+            ) : (
+              <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {photos.map((photo, idx) => {
+                  const movePhoto = (delta: number) => {
+                    const target = idx + delta;
+                    if (target < 0 || target >= photos.length) return;
+                    const next = photos.slice();
+                    const [moved] = next.splice(idx, 1);
+                    next.splice(target, 0, moved);
+                    void reorderPhotos(next.map((p) => p.id));
+                  };
+                  return (
+                    <li
+                      key={photo.id}
+                      className="overflow-hidden rounded-2xl border border-black/8 bg-zinc-50 dark:border-white/12 dark:bg-white/4"
+                    >
+                      <div className="relative aspect-square w-full bg-zinc-200 dark:bg-zinc-900">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photo.url}
+                          alt={`Photo slide ${idx + 1}`}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                        {idx === 0 ? (
+                          <span className="absolute left-2 top-2 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                            Primary
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 p-3">
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => movePhoto(-1)}
+                            disabled={photosBusy || idx === 0}
+                            className="rounded-md border border-black/10 px-2 py-1 text-xs text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
+                            aria-label="Move photo up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => movePhoto(1)}
+                            disabled={photosBusy || idx === photos.length - 1}
+                            className="rounded-md border border-black/10 px-2 py-1 text-xs text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
+                            aria-label="Move photo down"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm('Delete this photo?')) return;
+                            void removePhoto(photo.id);
+                          }}
+                          disabled={photosBusy}
+                          className="text-xs font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
 
@@ -661,6 +870,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
