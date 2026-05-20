@@ -15,6 +15,27 @@ export type PhotoUrlValidation =
   | { ok: true; objectKey: string }
   | { ok: false; error: string };
 
+function decodeObjectKey(pathname: string): { ok: true; objectKey: string } | { ok: false } {
+  try {
+    return { ok: true, objectKey: decodeURIComponent(pathname) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function isSafePhotoObjectKey(objectKey: string): boolean {
+  const [ownerFolder, filename, ...rest] = objectKey.split('/');
+  return Boolean(
+    ownerFolder &&
+      filename &&
+      rest.length === 0 &&
+      ownerFolder !== '.' &&
+      ownerFolder !== '..' &&
+      filename !== '.' &&
+      filename !== '..',
+  );
+}
+
 /**
  * Confirms the URL points at the configured Supabase project's
  * `user-photos` bucket, inside the signed-in user's own folder.
@@ -52,15 +73,20 @@ export function validatePhotoUrl(
     return { ok: false, error: `Photo URL must reference the ${USER_PHOTOS_BUCKET} bucket` };
   }
 
-  const objectKey = decodeURIComponent(parsed.pathname.slice(PUBLIC_OBJECT_PREFIX.length));
+  const decoded = decodeObjectKey(parsed.pathname.slice(PUBLIC_OBJECT_PREFIX.length));
+  if (!decoded.ok) {
+    return { ok: false, error: 'Photo URL has invalid encoding in the object path' };
+  }
+
+  const objectKey = decoded.objectKey;
   if (!objectKey) {
     return { ok: false, error: 'Photo URL is missing the object path' };
   }
 
-  const [ownerFolder, ...rest] = objectKey.split('/');
-  if (!ownerFolder || rest.length === 0 || rest.some(part => part.length === 0)) {
+  if (!isSafePhotoObjectKey(objectKey)) {
     return { ok: false, error: 'Photo URL must include a file inside your folder' };
   }
+  const [ownerFolder] = objectKey.split('/');
 
   if (ownerFolder !== authUserId) {
     return { ok: false, error: 'Photo URL must live in your own storage folder' };
@@ -91,8 +117,11 @@ export async function removeStorageObjectForUrl(
     return { ok: false, reason: 'not a user-photos URL' };
   }
 
-  const objectKey = decodeURIComponent(parsed.pathname.slice(PUBLIC_OBJECT_PREFIX.length));
+  const decoded = decodeObjectKey(parsed.pathname.slice(PUBLIC_OBJECT_PREFIX.length));
+  if (!decoded.ok) return { ok: false, reason: 'invalid encoded object key' };
+  const objectKey = decoded.objectKey;
   if (!objectKey) return { ok: false, reason: 'empty object key' };
+  if (!isSafePhotoObjectKey(objectKey)) return { ok: false, reason: 'unsafe object key path' };
 
   const { error } = await supabaseAdmin.storage.from(USER_PHOTOS_BUCKET).remove([objectKey]);
   if (error) return { ok: false, reason: error.message };
