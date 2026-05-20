@@ -45,6 +45,13 @@ export default function GroupChatClient(props: { groupSlug: string }) {
 
   const groupName = chat?.group?.name ?? groupSlug;
 
+  const fetchMessages = useCallback(async (chatId: string) => {
+    const res = await apiGet<MessagesResponse>(
+      `/me/chats/${chatId}/messages?limit=50`,
+    );
+    setMessages(res.messages ?? []);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -57,8 +64,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       }
       setChat(found);
 
-      const res = await apiGet<MessagesResponse>(`/me/chats/${found.id}/messages?limit=50`);
-      setMessages(res.messages ?? []);
+      await fetchMessages(found.id);
     } catch (e) {
       setChat(null);
       setMessages([]);
@@ -66,11 +72,53 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     } finally {
       setLoading(false);
     }
-  }, [groupSlug]);
+  }, [fetchMessages, groupSlug]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!chat) return;
+
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        await fetchMessages(chat.id);
+      } catch {
+        if (!cancelled) {
+          // Keep the current thread visible if a background refresh fails.
+        }
+      }
+    };
+
+    const onFocus = () => {
+      void refresh();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, 5000);
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    void refresh();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [chat, fetchMessages]);
 
   useEffect(() => {
     if (!listRef.current) return;
