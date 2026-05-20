@@ -18,7 +18,10 @@ export type PhotoUrlValidation =
 function decodeObjectKey(pathname: string): { ok: true; objectKey: string } | { ok: false } {
   try {
     return { ok: true, objectKey: decodeURIComponent(pathname) };
-  } catch {
+  } catch (error) {
+    if (!(error instanceof URIError)) {
+      throw error;
+    }
     return { ok: false };
   }
 }
