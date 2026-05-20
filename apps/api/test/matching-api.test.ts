@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict';
-import { beforeEach, describe, it } from 'node:test';
-import Fastify from 'fastify';
 import {
   FormationInviteStatus,
   GroupFormationStatus,
   GroupRole,
   SwipeDecision,
 } from '@prisma/client';
+import Fastify from 'fastify';
+import assert from 'node:assert/strict';
+import { beforeEach, describe, it } from 'node:test';
 
 const ME = '00000000-0000-4000-8000-000000000001';
 const USER_A = '00000000-0000-4000-8000-000000000002';
@@ -106,13 +106,13 @@ type State = {
 let state: State;
 
 function interest(id: string) {
-  const found = state.interests.find(i => i.id === id);
+  const found = state.interests.find((i) => i.id === id);
   if (!found) throw new Error(`Missing interest ${id}`);
   return found;
 }
 
 function user(id: string) {
-  const found = state.users.find(u => u.id === id);
+  const found = state.users.find((u) => u.id === id);
   if (!found) throw new Error(`Missing user ${id}`);
   return found;
 }
@@ -124,7 +124,7 @@ function seekingWithInterests(row: State['groupSeekings'][number]) {
     targetGroupSize: row.targetGroupSize,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    interests: row.interestIds.map(interestId => ({
+    interests: row.interestIds.map((interestId) => ({
       userGroupSeekingId: row.id,
       interestId,
       interest: interest(interestId),
@@ -133,14 +133,16 @@ function seekingWithInterests(row: State['groupSeekings'][number]) {
 }
 
 function proposalWithIncludes(row: State['formationProposals'][number]) {
-  const seeking = state.groupSeekings.find(s => s.id === row.userGroupSeekingId);
+  const seeking = state.groupSeekings.find(
+    (s) => s.id === row.userGroupSeekingId,
+  );
   if (!seeking) throw new Error(`Missing seeking ${row.userGroupSeekingId}`);
   return {
     ...row,
     userGroupSeeking: seekingWithInterests(seeking),
     invites: state.formationInvites
-      .filter(inv => inv.proposalId === row.id)
-      .map(inv => ({
+      .filter((inv) => inv.proposalId === row.id)
+      .map((inv) => ({
         ...inv,
         user: {
           id: inv.userId,
@@ -155,11 +157,37 @@ function resetState() {
   const now = new Date('2026-05-15T12:00:00.000Z');
   state = {
     users: [
-      { id: ME, email: 'me@example.com', username: 'me', displayName: 'Me', supabaseAuthId: ME },
-      { id: USER_A, email: 'a@example.com', username: 'user-a', displayName: 'User A' },
-      { id: USER_B, email: 'b@example.com', username: 'user-b', displayName: 'User B' },
-      { id: USER_C, email: 'c@example.com', username: 'user-c', displayName: 'User C' },
-      { id: USER_D, email: 'd@example.com', username: 'user-d', displayName: 'User D' },
+      {
+        id: ME,
+        email: 'me@example.com',
+        username: 'me',
+        displayName: 'Me',
+        supabaseAuthId: ME,
+      },
+      {
+        id: USER_A,
+        email: 'a@example.com',
+        username: 'user-a',
+        displayName: 'User A',
+      },
+      {
+        id: USER_B,
+        email: 'b@example.com',
+        username: 'user-b',
+        displayName: 'User B',
+      },
+      {
+        id: USER_C,
+        email: 'c@example.com',
+        username: 'user-c',
+        displayName: 'User C',
+      },
+      {
+        id: USER_D,
+        email: 'd@example.com',
+        username: 'user-d',
+        displayName: 'User D',
+      },
     ],
     interests: [
       { id: INTEREST_A, slug: 'hiking', name: 'Hiking' },
@@ -195,44 +223,109 @@ function resetState() {
   });
 }
 
-function matchesWhere<T extends Record<string, unknown>>(row: T, where: Record<string, unknown>): boolean {
+function matchesWhere<T extends Record<string, unknown>>(
+  row: T,
+  where: Record<string, unknown>,
+): boolean {
   for (const [key, value] of Object.entries(where)) {
-    if (key === 'id' && typeof value === 'string' && row.id !== value) return false;
-    if (key === 'userId' && typeof value === 'string' && row.userId !== value) return false;
-    if (key === 'swiperId' && typeof value === 'string' && row.swiperId !== value) return false;
-    if (key === 'swiperId' && typeof value === 'object' && value && 'in' in value) {
+    if (key === 'id' && typeof value === 'string' && row.id !== value)
+      return false;
+    if (key === 'userId' && typeof value === 'string' && row.userId !== value)
+      return false;
+    if (
+      key === 'swiperId' &&
+      typeof value === 'string' &&
+      row.swiperId !== value
+    )
+      return false;
+    if (
+      key === 'swiperId' &&
+      typeof value === 'object' &&
+      value &&
+      'in' in value
+    ) {
       if (!(value.in as string[]).includes(String(row.swiperId))) return false;
     }
-    if (key === 'targetUserId' && typeof value === 'string' && row.targetUserId !== value) return false;
-    if (key === 'targetUserId' && typeof value === 'object' && value && 'in' in value) {
-      if (!(value.in as string[]).includes(String(row.targetUserId))) return false;
+    if (
+      key === 'targetUserId' &&
+      typeof value === 'string' &&
+      row.targetUserId !== value
+    )
+      return false;
+    if (
+      key === 'targetUserId' &&
+      typeof value === 'object' &&
+      value &&
+      'in' in value
+    ) {
+      if (!(value.in as string[]).includes(String(row.targetUserId)))
+        return false;
     }
-    if (key === 'decision' && typeof value === 'string' && row.decision !== value) return false;
-    if (key === 'status' && typeof value === 'string' && row.status !== value) return false;
-    if (key === 'proposalId' && typeof value === 'string' && row.proposalId !== value) return false;
-    if (key === 'userGroupSeekingId' && typeof value === 'string' && row.userGroupSeekingId !== value) {
+    if (
+      key === 'decision' &&
+      typeof value === 'string' &&
+      row.decision !== value
+    )
+      return false;
+    if (key === 'status' && typeof value === 'string' && row.status !== value)
+      return false;
+    if (
+      key === 'proposalId' &&
+      typeof value === 'string' &&
+      row.proposalId !== value
+    )
+      return false;
+    if (
+      key === 'userGroupSeekingId' &&
+      typeof value === 'string' &&
+      row.userGroupSeekingId !== value
+    ) {
       return false;
     }
-    if (key === 'userId' && typeof value === 'object' && value && 'in' in value) {
+    if (
+      key === 'userId' &&
+      typeof value === 'object' &&
+      value &&
+      'in' in value
+    ) {
       if (!(value.in as string[]).includes(String(row.userId))) return false;
     }
-    if (key === 'interestId' && typeof value === 'object' && value && 'in' in value) {
-      if (!(value.in as string[]).includes(String(row.interestId))) return false;
+    if (
+      key === 'interestId' &&
+      typeof value === 'object' &&
+      value &&
+      'in' in value
+    ) {
+      if (!(value.in as string[]).includes(String(row.interestId)))
+        return false;
     }
-    if (key === 'targetGroupSize' && typeof value === 'number' && row.targetGroupSize !== value) return false;
+    if (
+      key === 'targetGroupSize' &&
+      typeof value === 'number' &&
+      row.targetGroupSize !== value
+    )
+      return false;
   }
   return true;
 }
 
 const prisma = {
   user: {
-    findUnique: async ({ where }: { where: { id?: string; email?: string; supabaseAuthId?: string } }) =>
-      state.users.find(u => u.id === where.id || u.email === where.email || u.supabaseAuthId === where.supabaseAuthId) ??
-      null,
+    findUnique: async ({
+      where,
+    }: {
+      where: { id?: string; email?: string; supabaseAuthId?: string };
+    }) =>
+      state.users.find(
+        (u) =>
+          u.id === where.id ||
+          u.email === where.email ||
+          u.supabaseAuthId === where.supabaseAuthId,
+      ) ?? null,
     findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
       state.users
-        .filter(u => where.id.in.includes(u.id))
-        .map(u => ({
+        .filter((u) => where.id.in.includes(u.id))
+        .map((u) => ({
           id: u.id,
           username: u.username,
           displayName: u.displayName,
@@ -242,39 +335,65 @@ const prisma = {
   userInterest: {
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
       state.userInterests
-        .filter(row => {
-          if (typeof where.userId === 'string' && row.userId !== where.userId) return false;
-          if (where.interestId && typeof where.interestId === 'object' && 'in' in where.interestId) {
-            if (!(where.interestId.in as string[]).includes(row.interestId)) return false;
+        .filter((row) => {
+          if (typeof where.userId === 'string' && row.userId !== where.userId)
+            return false;
+          if (
+            where.interestId &&
+            typeof where.interestId === 'object' &&
+            'in' in where.interestId
+          ) {
+            if (!(where.interestId.in as string[]).includes(row.interestId))
+              return false;
           }
-          if (where.userId && typeof where.userId === 'object' && 'notIn' in where.userId) {
-            if ((where.userId.notIn as string[]).includes(row.userId)) return false;
+          if (
+            where.userId &&
+            typeof where.userId === 'object' &&
+            'notIn' in where.userId
+          ) {
+            if ((where.userId.notIn as string[]).includes(row.userId))
+              return false;
           }
-          if (where.userId && typeof where.userId === 'object' && 'in' in where.userId) {
-            if (!(where.userId.in as string[]).includes(row.userId)) return false;
+          if (
+            where.userId &&
+            typeof where.userId === 'object' &&
+            'in' in where.userId
+          ) {
+            if (!(where.userId.in as string[]).includes(row.userId))
+              return false;
           }
           return true;
         })
-        .map(row => ({ ...row, weight: row.weight ?? 5 })),
-    findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-      {
-        const row = state.userInterests.find(candidate => matchesWhere(candidate, where));
-        return row ? { ...row, weight: row.weight ?? 5 } : null;
-      },
+        .map((row) => ({ ...row, weight: row.weight ?? 5 })),
+    findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+      const row = state.userInterests.find((candidate) =>
+        matchesWhere(candidate, where),
+      );
+      return row ? { ...row, weight: row.weight ?? 5 } : null;
+    },
   },
   userSwipe: {
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
-      state.swipes.filter(row => {
+      state.swipes.filter((row) => {
         return matchesWhere(row, where);
       }),
     upsert: async (args: {
-      where: { swiperId_targetUserId: { swiperId: string; targetUserId: string } };
-      create: { swiperId: string; targetUserId: string; decision: SwipeDecision };
+      where: {
+        swiperId_targetUserId: { swiperId: string; targetUserId: string };
+      };
+      create: {
+        swiperId: string;
+        targetUserId: string;
+        decision: SwipeDecision;
+      };
       update: { decision: SwipeDecision };
     }) => {
       state.calls.swipeUpserts.push(args);
       const key = args.where.swiperId_targetUserId;
-      const existing = state.swipes.find(s => s.swiperId === key.swiperId && s.targetUserId === key.targetUserId);
+      const existing = state.swipes.find(
+        (s) =>
+          s.swiperId === key.swiperId && s.targetUserId === key.targetUserId,
+      );
       if (existing) existing.decision = args.update.decision;
       else state.swipes.push(args.create);
       return existing ?? args.create;
@@ -282,81 +401,140 @@ const prisma = {
   },
   interest: {
     count: async ({ where }: { where: { id: { in: string[] } } }) =>
-      state.interests.filter(i => where.id.in.includes(i.id)).length,
+      state.interests.filter((i) => where.id.in.includes(i.id)).length,
     findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
-      state.interests.filter(i => where.id.in.includes(i.id)),
+      state.interests.filter((i) => where.id.in.includes(i.id)),
   },
   userGroupSeeking: {
     count: async ({ where }: { where: { userId: string } }) =>
-      state.groupSeekings.filter(s => s.userId === where.userId).length,
+      state.groupSeekings.filter((s) => s.userId === where.userId).length,
     create: async (args: {
-      data: { userId: string; targetGroupSize: number; interests: { create: { interestId: string }[] } };
+      data: {
+        userId: string;
+        targetGroupSize: number;
+        interests: { create: { interestId: string }[] };
+      };
     }) => {
       state.calls.seekingCreates.push(args);
       const row = {
         id: `20000000-0000-4000-8000-${String(state.groupSeekings.length + 100).padStart(12, '0')}`,
         userId: args.data.userId,
         targetGroupSize: args.data.targetGroupSize,
-        interestIds: args.data.interests.create.map(i => i.interestId),
+        interestIds: args.data.interests.create.map((i) => i.interestId),
         createdAt: new Date('2026-05-15T13:00:00.000Z'),
         updatedAt: new Date('2026-05-15T13:00:00.000Z'),
       };
       state.groupSeekings.push(row);
       return seekingWithInterests(row);
     },
-    findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-      {
-        const row = state.groupSeekings.find(candidate => matchesWhere(candidate, where));
-        return row ? seekingWithInterests(row) : null;
-      },
+    findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+      const row = state.groupSeekings.find((candidate) =>
+        matchesWhere(candidate, where),
+      );
+      return row ? seekingWithInterests(row) : null;
+    },
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
       state.groupSeekings
-        .filter(row => {
-          if (where.userId && typeof where.userId === 'string' && row.userId !== where.userId) return false;
-          if (where.userId && typeof where.userId === 'object' && 'in' in where.userId) {
-            if (!(where.userId.in as string[]).includes(row.userId)) return false;
+        .filter((row) => {
+          if (
+            where.userId &&
+            typeof where.userId === 'string' &&
+            row.userId !== where.userId
+          )
+            return false;
+          if (
+            where.userId &&
+            typeof where.userId === 'object' &&
+            'in' in where.userId
+          ) {
+            if (!(where.userId.in as string[]).includes(row.userId))
+              return false;
           }
-          if (where.userId && typeof where.userId === 'object' && 'notIn' in where.userId) {
-            if ((where.userId.notIn as string[]).includes(row.userId)) return false;
+          if (
+            where.userId &&
+            typeof where.userId === 'object' &&
+            'notIn' in where.userId
+          ) {
+            if ((where.userId.notIn as string[]).includes(row.userId))
+              return false;
           }
-          if (where.targetGroupSize && typeof where.targetGroupSize === 'number') {
+          if (
+            where.targetGroupSize &&
+            typeof where.targetGroupSize === 'number'
+          ) {
             if (row.targetGroupSize !== where.targetGroupSize) return false;
           }
-          if (where.targetGroupSize && typeof where.targetGroupSize === 'object' && 'in' in where.targetGroupSize) {
-            if (!(where.targetGroupSize.in as number[]).includes(row.targetGroupSize)) return false;
+          if (
+            where.targetGroupSize &&
+            typeof where.targetGroupSize === 'object' &&
+            'in' in where.targetGroupSize
+          ) {
+            if (
+              !(where.targetGroupSize.in as number[]).includes(
+                row.targetGroupSize,
+              )
+            )
+              return false;
           }
           return true;
         })
         .map(seekingWithInterests),
-    update: async ({ where, data }: { where: { id: string }; data: { targetGroupSize?: number } }) => {
-      const row = state.groupSeekings.find(s => s.id === where.id);
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { targetGroupSize?: number };
+    }) => {
+      const row = state.groupSeekings.find((s) => s.id === where.id);
       if (!row) throw new Error(`Missing seeking ${where.id}`);
-      if (data.targetGroupSize !== undefined) row.targetGroupSize = data.targetGroupSize;
+      if (data.targetGroupSize !== undefined)
+        row.targetGroupSize = data.targetGroupSize;
       row.updatedAt = new Date('2026-05-15T14:00:00.000Z');
       return seekingWithInterests(row);
     },
     delete: async ({ where }: { where: { id: string } }) => {
-      state.groupSeekings = state.groupSeekings.filter(s => s.id !== where.id);
+      state.groupSeekings = state.groupSeekings.filter(
+        (s) => s.id !== where.id,
+      );
     },
   },
   userGroupSeekingInterest: {
-    deleteMany: async ({ where }: { where: { userGroupSeekingId: string } }) => {
-      const row = state.groupSeekings.find(s => s.id === where.userGroupSeekingId);
+    deleteMany: async ({
+      where,
+    }: {
+      where: { userGroupSeekingId: string };
+    }) => {
+      const row = state.groupSeekings.find(
+        (s) => s.id === where.userGroupSeekingId,
+      );
       if (row) row.interestIds = [];
     },
-    createMany: async ({ data }: { data: { userGroupSeekingId: string; interestId: string }[] }) => {
+    createMany: async ({
+      data,
+    }: {
+      data: { userGroupSeekingId: string; interestId: string }[];
+    }) => {
       const bySeeking = new Map<string, string[]>();
-      for (const row of data) bySeeking.set(row.userGroupSeekingId, [...(bySeeking.get(row.userGroupSeekingId) ?? []), row.interestId]);
+      for (const row of data)
+        bySeeking.set(row.userGroupSeekingId, [
+          ...(bySeeking.get(row.userGroupSeekingId) ?? []),
+          row.interestId,
+        ]);
       for (const [seekingId, interestIds] of bySeeking.entries()) {
-        const row = state.groupSeekings.find(s => s.id === seekingId);
+        const row = state.groupSeekings.find((s) => s.id === seekingId);
         if (row) row.interestIds = interestIds;
       }
     },
   },
   groupFormationProposal: {
     findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-      state.formationProposals.find(row => matchesWhere(row, where)) ?? null,
-    create: async ({ data }: { data: { userGroupSeekingId: string; status: GroupFormationStatus } }) => {
+      state.formationProposals.find((row) => matchesWhere(row, where)) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: { userGroupSeekingId: string; status: GroupFormationStatus };
+    }) => {
       state.calls.proposalCreates.push(data);
       const proposalNumber = state.formationProposals.length + 1;
       const row = {
@@ -374,31 +552,57 @@ const prisma = {
       return row;
     },
     findUnique: async ({ where }: { where: { id: string } }) => {
-      const row = state.formationProposals.find(p => p.id === where.id);
+      const row = state.formationProposals.find((p) => p.id === where.id);
       return row ? proposalWithIncludes(row) : null;
     },
-    update: async ({ where, data }: { where: { id: string }; data: Partial<State['formationProposals'][number]> }) => {
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Partial<State['formationProposals'][number]>;
+    }) => {
       state.calls.proposalUpdates.push({ where, data });
-      const row = state.formationProposals.find(p => p.id === where.id);
+      const row = state.formationProposals.find((p) => p.id === where.id);
       if (!row) throw new Error(`Missing proposal ${where.id}`);
       Object.assign(row, data);
       return row;
     },
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
       state.formationProposals
-        .filter(row => {
+        .filter((row) => {
           if (!matchesWhere(row, where)) return false;
-          if (where.userGroupSeeking && typeof where.userGroupSeeking === 'object' && 'is' in where.userGroupSeeking) {
-            const seeking = state.groupSeekings.find(s => s.id === row.userGroupSeekingId);
-            const relationFilter = where.userGroupSeeking.is as { userId?: string };
-            if (relationFilter.userId !== undefined && seeking?.userId !== relationFilter.userId) return false;
+          if (
+            where.userGroupSeeking &&
+            typeof where.userGroupSeeking === 'object' &&
+            'is' in where.userGroupSeeking
+          ) {
+            const seeking = state.groupSeekings.find(
+              (s) => s.id === row.userGroupSeekingId,
+            );
+            const relationFilter = where.userGroupSeeking.is as {
+              userId?: string;
+            };
+            if (
+              relationFilter.userId !== undefined &&
+              seeking?.userId !== relationFilter.userId
+            )
+              return false;
           }
           return true;
         })
         .map(proposalWithIncludes),
   },
   groupFormationInvite: {
-    create: async ({ data }: { data: { proposalId: string; userId: string; status: FormationInviteStatus } }) => {
+    create: async ({
+      data,
+    }: {
+      data: {
+        proposalId: string;
+        userId: string;
+        status: FormationInviteStatus;
+      };
+    }) => {
       state.calls.inviteCreates.push(data);
       const row = {
         id: `40000000-0000-4000-8000-${String(state.formationInvites.length + 100).padStart(12, '0')}`,
@@ -410,43 +614,74 @@ const prisma = {
       return row;
     },
     findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-      const row = state.formationInvites.find(inv => matchesWhere(inv, where));
+      const row = state.formationInvites.find((inv) =>
+        matchesWhere(inv, where),
+      );
       if (!row) return null;
-      const proposal = state.formationProposals.find(p => p.id === row.proposalId);
+      const proposal = state.formationProposals.find(
+        (p) => p.id === row.proposalId,
+      );
       return { ...row, proposal };
     },
-    update: async ({ where, data }: { where: { id: string }; data: { status: FormationInviteStatus } }) => {
-      const row = state.formationInvites.find(inv => inv.id === where.id);
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { status: FormationInviteStatus };
+    }) => {
+      const row = state.formationInvites.find((inv) => inv.id === where.id);
       if (!row) throw new Error(`Missing invite ${where.id}`);
       row.status = data.status;
       return row;
     },
     findMany: async ({ where }: { where: Record<string, unknown> }) =>
       state.formationInvites
-        .filter(inv => {
+        .filter((inv) => {
           if (!matchesWhere(inv, where)) return false;
-          if (where.proposal && typeof where.proposal === 'object' && 'status' in where.proposal) {
-            const proposal = state.formationProposals.find(p => p.id === inv.proposalId);
-            return proposal?.status === (where.proposal as { status: GroupFormationStatus }).status;
+          if (
+            where.proposal &&
+            typeof where.proposal === 'object' &&
+            'status' in where.proposal
+          ) {
+            const proposal = state.formationProposals.find(
+              (p) => p.id === inv.proposalId,
+            );
+            return (
+              proposal?.status ===
+              (where.proposal as { status: GroupFormationStatus }).status
+            );
           }
           return true;
         })
-        .map(inv => {
-          const proposal = state.formationProposals.find(p => p.id === inv.proposalId);
+        .map((inv) => {
+          const proposal = state.formationProposals.find(
+            (p) => p.id === inv.proposalId,
+          );
           if (!proposal) throw new Error(`Missing proposal ${inv.proposalId}`);
           return { ...inv, proposal: proposalWithIncludes(proposal) };
         }),
   },
   group: {
-    findUnique: async ({ where }: { where: { slug: string } }) => state.groups.find(g => g.slug === where.slug) ?? null,
-    create: async ({ data }: { data: { slug: string; name: string; createdById: string; members: { create: { userId: string; role: GroupRole }[] } } }) => {
+    findUnique: async ({ where }: { where: { slug: string } }) =>
+      state.groups.find((g) => g.slug === where.slug) ?? null,
+    create: async ({
+      data,
+    }: {
+      data: {
+        slug: string;
+        name: string;
+        createdById: string;
+        members: { create: { userId: string; role: GroupRole }[] };
+      };
+    }) => {
       state.calls.groupsCreated.push(data);
       const row = {
         id: `50000000-0000-4000-8000-${String(state.groups.length + 100).padStart(12, '0')}`,
         slug: data.slug,
         name: data.name,
         createdById: data.createdById,
-        memberIds: data.members.create.map(m => m.userId),
+        memberIds: data.members.create.map((m) => m.userId),
       };
       state.groups.push(row);
       for (const member of data.members.create) {
@@ -466,9 +701,12 @@ const prisma = {
       create: { proposalId: string; groupId?: string };
       update: { groupId?: string };
     }) => {
-      const existing = state.groupChats.find(c => c.proposalId === args.where.proposalId) ?? null;
+      const existing =
+        state.groupChats.find((c) => c.proposalId === args.where.proposalId) ??
+        null;
       if (existing) {
-        if (args.update.groupId !== undefined) existing.groupId = args.update.groupId;
+        if (args.update.groupId !== undefined)
+          existing.groupId = args.update.groupId;
         return existing;
       }
 
@@ -485,14 +723,29 @@ const prisma = {
   },
   groupChatMember: {
     findMany: async ({ where }: { where: { chatId: string } }) =>
-      state.groupChatMembers.filter(m => m.chatId === where.chatId),
-    findUnique: async ({ where }: { where: { chatId_userId: { chatId: string; userId: string } } }) => {
+      state.groupChatMembers.filter((m) => m.chatId === where.chatId),
+    findUnique: async ({
+      where,
+    }: {
+      where: { chatId_userId: { chatId: string; userId: string } };
+    }) => {
       const key = where.chatId_userId;
-      return state.groupChatMembers.find(m => m.chatId === key.chatId && m.userId === key.userId) ?? null;
+      return (
+        state.groupChatMembers.find(
+          (m) => m.chatId === key.chatId && m.userId === key.userId,
+        ) ?? null
+      );
     },
-    createMany: async ({ data }: { data: { chatId: string; userId: string }[]; skipDuplicates?: boolean }) => {
+    createMany: async ({
+      data,
+    }: {
+      data: { chatId: string; userId: string }[];
+      skipDuplicates?: boolean;
+    }) => {
       for (const row of data) {
-        const exists = state.groupChatMembers.some(m => m.chatId === row.chatId && m.userId === row.userId);
+        const exists = state.groupChatMembers.some(
+          (m) => m.chatId === row.chatId && m.userId === row.userId,
+        );
         if (exists) continue;
         state.groupChatMembers.push({
           chatId: row.chatId,
@@ -506,9 +759,9 @@ const prisma = {
   groupMember: {
     findMany: async ({ where }: { where: { userId: string } }) =>
       state.groupMemberships
-        .filter(m => m.userId === where.userId)
-        .map(m => {
-          const group = state.groups.find(g => g.id === m.groupId);
+        .filter((m) => m.userId === where.userId)
+        .map((m) => {
+          const group = state.groups.find((g) => g.id === m.groupId);
           if (!group) throw new Error(`Missing group ${m.groupId}`);
           return {
             ...m,
@@ -533,10 +786,10 @@ const prisma = {
       if (where?.userId) {
         if (typeof where.userId === 'string') {
           const target = where.userId;
-          rows = rows.filter(p => p.userId === target);
+          rows = rows.filter((p) => p.userId === target);
         } else if ('in' in where.userId) {
           const ids = where.userId.in;
-          rows = rows.filter(p => ids.includes(p.userId));
+          rows = rows.filter((p) => ids.includes(p.userId));
         }
       }
       if (orderBy?.position) {
@@ -553,8 +806,8 @@ const prisma = {
       orderBy?: { position?: 'asc' | 'desc' };
     }) => {
       let rows = state.userPhotos.slice();
-      if (where.userId) rows = rows.filter(p => p.userId === where.userId);
-      if (where.id) rows = rows.filter(p => p.id === where.id);
+      if (where.userId) rows = rows.filter((p) => p.userId === where.userId);
+      if (where.id) rows = rows.filter((p) => p.id === where.id);
       if (orderBy?.position) {
         const dir = orderBy.position === 'asc' ? 1 : -1;
         rows = rows.sort((a, b) => (a.position - b.position) * dir);
@@ -562,10 +815,14 @@ const prisma = {
       return rows[0] ?? null;
     },
     count: async ({ where }: { where: { userId: string } }) =>
-      state.userPhotos.filter(p => p.userId === where.userId).length,
-    create: async ({ data }: { data: { userId: string; url: string; position: number } }) => {
+      state.userPhotos.filter((p) => p.userId === where.userId).length,
+    create: async ({
+      data,
+    }: {
+      data: { userId: string; url: string; position: number };
+    }) => {
       const dupe = state.userPhotos.find(
-        p => p.userId === data.userId && p.position === data.position,
+        (p) => p.userId === data.userId && p.position === data.position,
       );
       if (dupe) {
         const err = new Error('Unique constraint failed') as Error & {
@@ -594,7 +851,7 @@ const prisma = {
       where: { id: string };
       data: { url?: string; position?: number };
     }) => {
-      const row = state.userPhotos.find(p => p.id === where.id);
+      const row = state.userPhotos.find((p) => p.id === where.id);
       if (!row) throw new Error(`Missing photo ${where.id}`);
       if (data.url !== undefined) row.url = data.url;
       if (data.position !== undefined) row.position = data.position;
@@ -603,15 +860,17 @@ const prisma = {
     },
     delete: async ({ where }: { where: { id: string } }) => {
       const before = state.userPhotos.length;
-      state.userPhotos = state.userPhotos.filter(p => p.id !== where.id);
-      if (state.userPhotos.length === before) throw new Error(`Missing photo ${where.id}`);
+      state.userPhotos = state.userPhotos.filter((p) => p.id !== where.id);
+      if (state.userPhotos.length === before)
+        throw new Error(`Missing photo ${where.id}`);
     },
   },
   $transaction: async <T>(fn: (tx: typeof prisma) => Promise<T>) => fn(prisma),
 };
 
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@127.0.0.1:5432/uconnect_test';
+process.env.DATABASE_URL ??=
+  'postgresql://postgres:postgres@127.0.0.1:5432/uconnect_test';
 
 const { setPrismaClientForTests } = await import('../src/db.js');
 const { registerMatchingRoutes } = await import('../src/routes/matching.js');
@@ -633,7 +892,10 @@ function supabaseAdmin() {
   return {
     auth: {
       getUser: async (token: string) => ({
-        data: token === 'good-token' ? { user: { id: ME, email: 'me@example.com' } } : { user: null },
+        data:
+          token === 'good-token'
+            ? { user: { id: ME, email: 'me@example.com' } }
+            : { user: null },
         error: token === 'good-token' ? null : new Error('bad token'),
       }),
     },
@@ -641,7 +903,7 @@ function supabaseAdmin() {
       from: (bucket: string) => ({
         remove: async (paths: string[]) => {
           storageRemoveCalls.push({ bucket, paths });
-          return { data: paths.map(p => ({ name: p })), error: null };
+          return { data: paths.map((p) => ({ name: p })), error: null };
         },
       }),
     },
@@ -650,10 +912,14 @@ function supabaseAdmin() {
 
 function makeApp(opts: { supabaseUrl?: string | null } = {}) {
   const app = Fastify({ logger: false });
-  const supabaseUrl = opts.supabaseUrl === undefined ? SUPABASE_URL : opts.supabaseUrl;
+  const supabaseUrl =
+    opts.supabaseUrl === undefined ? SUPABASE_URL : opts.supabaseUrl;
   registerMatchingRoutes(app, { supabaseAdmin: supabaseAdmin() as never });
   registerGroupsRoutes(app, { supabaseAdmin: supabaseAdmin() as never });
-  registerProfileRoutes(app, { supabaseAdmin: supabaseAdmin() as never, supabaseUrl });
+  registerProfileRoutes(app, {
+    supabaseAdmin: supabaseAdmin() as never,
+    supabaseUrl,
+  });
   return app;
 }
 
@@ -745,17 +1011,106 @@ describe('matching APIs', () => {
     assert.deepEqual(
       response
         .json()
-        .users.map((u: { id: string; sharedInterestCount: number; matchScore: number; matchedGroupSize: number | null }) => [
-          u.id,
-          u.sharedInterestCount,
-          Math.round(u.matchScore * 1000) / 1000,
-          u.matchedGroupSize,
-        ]),
+        .users.map(
+          (u: {
+            id: string;
+            sharedInterestCount: number;
+            matchScore: number;
+            matchedGroupSize: number | null;
+          }) => [
+            u.id,
+            u.sharedInterestCount,
+            Math.round(u.matchScore * 1000) / 1000,
+            u.matchedGroupSize,
+          ],
+        ),
       [
         [USER_B, 2, 0.996, 3],
         [USER_A, 1, 0.6, 3],
         [USER_C, 1, 0.566, 3],
       ],
+    );
+  });
+
+  it('excludes compatible-seeking users without a shared profile interest', async () => {
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 3 },
+      { userId: ME, interestId: INTEREST_B, weight: 4 },
+      { userId: USER_A, interestId: INTEREST_C, weight: 10 },
+      { userId: USER_B, interestId: INTEREST_A, weight: 9 },
+      { userId: USER_B, interestId: INTEREST_B, weight: 10 },
+    );
+    state.groupSeekings.push(
+      {
+        id: '20000000-0000-4000-8000-000000000002',
+        userId: USER_A,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '20000000-0000-4000-8000-000000000003',
+        userId: USER_B,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A, INTEREST_B],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/matching/discovery',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().reason, 'COMPATIBLE_SEEKINGS');
+    assert.deepEqual(
+      (response.json().users as Array<{ id: string }>).map((u) => u.id),
+      [USER_B],
+    );
+  });
+
+  it('falls back to profile-interest matching when compatible seekers have no shared profile interests', async () => {
+    state.userInterests.push(
+      { userId: ME, interestId: INTEREST_A, weight: 3 },
+      { userId: ME, interestId: INTEREST_B, weight: 4 },
+      { userId: USER_A, interestId: INTEREST_C, weight: 10 },
+      { userId: USER_B, interestId: INTEREST_C, weight: 9 },
+      { userId: USER_C, interestId: INTEREST_A, weight: 8 },
+    );
+    state.groupSeekings.push(
+      {
+        id: '20000000-0000-4000-8000-000000000002',
+        userId: USER_A,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '20000000-0000-4000-8000-000000000003',
+        userId: USER_B,
+        targetGroupSize: 3,
+        interestIds: [INTEREST_A],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/matching/discovery',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().reason, 'PROFILE_FALLBACK');
+    assert.deepEqual(
+      (response.json().users as Array<{ id: string }>).map((u) => u.id),
+      [USER_C],
     );
   });
 
@@ -776,9 +1131,12 @@ describe('matching APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.json().reason, 'PROFILE_FALLBACK');
-    const users = response.json().users as Array<{ id: string; matchedGroupSize: number | null }>;
+    const users = response.json().users as Array<{
+      id: string;
+      matchedGroupSize: number | null;
+    }>;
     assert.deepEqual(
-      users.map(u => [u.id, u.matchedGroupSize]).sort(),
+      users.map((u) => [u.id, u.matchedGroupSize]).sort(),
       [
         [USER_A, null],
         [USER_B, null],
@@ -810,7 +1168,11 @@ describe('matching APIs', () => {
         updatedAt: new Date(),
       },
     );
-    state.swipes.push({ swiperId: ME, targetUserId: USER_A, decision: SwipeDecision.NO });
+    state.swipes.push({
+      swiperId: ME,
+      targetUserId: USER_A,
+      decision: SwipeDecision.NO,
+    });
 
     const response = await makeApp().inject({
       method: 'GET',
@@ -820,7 +1182,7 @@ describe('matching APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(
-      (response.json().users as { id: string }[]).map(u => u.id),
+      (response.json().users as { id: string }[]).map((u) => u.id),
       [USER_B],
     );
   });
@@ -938,9 +1300,12 @@ describe('matching APIs', () => {
     });
 
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.json(), { proposalId: PROPOSAL_ID, reused: false });
+    assert.deepEqual(response.json(), {
+      proposalId: PROPOSAL_ID,
+      reused: false,
+    });
     assert.deepEqual(
-      state.formationInvites.map(inv => [inv.userId, inv.status]),
+      state.formationInvites.map((inv) => [inv.userId, inv.status]),
       [
         [ME, FormationInviteStatus.ACCEPTED],
         [USER_B, FormationInviteStatus.PENDING],
@@ -997,7 +1362,11 @@ describe('matching APIs', () => {
       { userId: ME, interestId: INTEREST_A, weight: 10 },
       { userId: USER_A, interestId: INTEREST_A, weight: 10 },
     );
-    state.swipes.push({ swiperId: USER_A, targetUserId: ME, decision: SwipeDecision.YES });
+    state.swipes.push({
+      swiperId: USER_A,
+      targetUserId: ME,
+      decision: SwipeDecision.YES,
+    });
     state.groupSeekings.push({
       id: '20000000-0000-4000-8000-000000000002',
       userId: USER_A,
@@ -1018,7 +1387,7 @@ describe('matching APIs', () => {
     assert.equal(response.json().ok, true);
     assert.equal(state.formationProposals.length, 2);
     assert.deepEqual(
-      state.formationInvites.slice(0, 2).map(inv => [inv.userId, inv.status]),
+      state.formationInvites.slice(0, 2).map((inv) => [inv.userId, inv.status]),
       [
         [ME, FormationInviteStatus.ACCEPTED],
         [USER_A, FormationInviteStatus.PENDING],
@@ -1070,9 +1439,15 @@ describe('matching APIs', () => {
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(state.formationProposals[0].status, GroupFormationStatus.FULFILLED);
+    assert.equal(
+      state.formationProposals[0].status,
+      GroupFormationStatus.FULFILLED,
+    );
     assert.equal(state.groups.length, 1);
-    assert.deepEqual(state.groups[0].memberIds.sort(), [ME, USER_A, USER_B].sort());
+    assert.deepEqual(
+      state.groups[0].memberIds.sort(),
+      [ME, USER_A, USER_B].sort(),
+    );
 
     // Once >=2 users accept, a proposal chat should exist and include all accepted members.
     assert.equal(state.groupChats.length, 1);
@@ -1080,8 +1455,8 @@ describe('matching APIs', () => {
     assert.equal(state.groupChats[0]?.groupId, state.groups[0]?.id);
     assert.deepEqual(
       state.groupChatMembers
-        .filter(m => m.chatId === state.groupChats[0]?.id)
-        .map(m => m.userId)
+        .filter((m) => m.chatId === state.groupChats[0]?.id)
+        .map((m) => m.userId)
         .sort(),
       [ME, USER_A, USER_B].sort(),
     );
@@ -1127,17 +1502,19 @@ describe('matching APIs', () => {
     });
 
     assert.equal(response.statusCode, 200);
-    const user = (response.json().users as Array<{
-      id: string;
-      bio: string | null;
-      avatarUrl: string | null;
-      photos: { url: string; position: number }[];
-    }>).find(u => u.id === USER_A);
+    const user = (
+      response.json().users as Array<{
+        id: string;
+        bio: string | null;
+        avatarUrl: string | null;
+        photos: { url: string; position: number }[];
+      }>
+    ).find((u) => u.id === USER_A);
     assert.ok(user, 'USER_A should be in the discovery result');
     assert.equal(user.bio, 'Coffee, books, long walks.');
     assert.equal(user.avatarUrl, 'https://cdn.example.com/a/main.jpg');
     assert.deepEqual(
-      user.photos.map(p => [p.position, p.url]),
+      user.photos.map((p) => [p.position, p.url]),
       [
         [0, 'https://cdn.example.com/a/main.jpg'],
         [1, 'https://cdn.example.com/a/second.jpg'],
@@ -1172,7 +1549,10 @@ describe('matching APIs', () => {
     assert.equal(response.statusCode, 200);
     assert.equal(response.json().groupSeekings.length, 1);
     assert.equal(response.json().invitesPendingMyAnswer.length, 1);
-    assert.equal(response.json().invitesPendingMyAnswer[0].proposal.id, PROPOSAL_ID);
+    assert.equal(
+      response.json().invitesPendingMyAnswer[0].proposal.id,
+      PROPOSAL_ID,
+    );
   });
 });
 
@@ -1213,7 +1593,7 @@ describe('photo deck APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(
-      (response.json().photos as { position: number }[]).map(p => p.position),
+      (response.json().photos as { position: number }[]).map((p) => p.position),
       [0, 1, 2],
     );
   });
@@ -1280,14 +1660,19 @@ describe('photo deck APIs', () => {
       method: 'POST',
       url: '/me/photos',
       headers: authHeaders(),
-      payload: { url: 'https://attacker.example.com/storage/v1/object/public/user-photos/' + ME + '/x.jpg' },
+      payload: {
+        url:
+          'https://attacker.example.com/storage/v1/object/public/user-photos/' +
+          ME +
+          '/x.jpg',
+      },
     });
 
     assert.equal(response.statusCode, 400);
     assert.match(response.json().error, /Supabase Storage/);
   });
 
-  it('rejects photo URLs that live in another user\'s storage folder', async () => {
+  it("rejects photo URLs that live in another user's storage folder", async () => {
     const response = await makeApp().inject({
       method: 'POST',
       url: '/me/photos',
@@ -1304,7 +1689,9 @@ describe('photo deck APIs', () => {
       method: 'POST',
       url: '/me/photos',
       headers: authHeaders(),
-      payload: { url: `${SUPABASE_URL}/storage/v1/object/public/avatars/${ME}/x.jpg` },
+      payload: {
+        url: `${SUPABASE_URL}/storage/v1/object/public/avatars/${ME}/x.jpg`,
+      },
     });
 
     assert.equal(response.statusCode, 400);
@@ -1357,7 +1744,11 @@ describe('photo deck APIs', () => {
       headers: authHeaders(),
     });
     assert.equal(notMineResp.statusCode, 404);
-    assert.equal(storageRemoveCalls.length, 1, 'no storage call for a 404 delete');
+    assert.equal(
+      storageRemoveCalls.length,
+      1,
+      'no storage call for a 404 delete',
+    );
   });
 
   it('reorders my photos according to the provided id list', async () => {
@@ -1403,7 +1794,9 @@ describe('photo deck APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(
-      (response.json().photos as { id: string; position: number }[]).map(p => [p.id, p.position]),
+      (response.json().photos as { id: string; position: number }[]).map(
+        (p) => [p.id, p.position],
+      ),
       [
         ['70000000-0000-4000-8000-000000000302', 0],
         ['70000000-0000-4000-8000-000000000300', 1],

@@ -53,11 +53,25 @@ type MyProfileRow = { interestId: string; weight: number };
 type RankedCandidate = {
   userId: string;
   matchedGroupSize: number | null;
-  sharedSeekingInterestIds: string[];
+  sharedInterestIds: string[];
   sharedInterestCount: number;
   matchScore: number;
   rawMatchScore: number;
 };
+
+function sharedInterestIds(
+  left: MyProfileRow[],
+  right: MyProfileRow[],
+): string[] {
+  const rightIds = new Set(right.map((row) => row.interestId));
+  return [
+    ...new Set(
+      left
+        .map((row) => row.interestId)
+        .filter((interestId) => rightIds.has(interestId)),
+    ),
+  ];
+}
 
 export async function getDiscoveryUsers(
   appUserId: string,
@@ -105,8 +119,22 @@ export async function getDiscoveryUsers(
   let ranked: RankedCandidate[];
 
   if (compatibleHits.size > 0) {
+    const compatible = await rankCompatibleCandidates(
+      myProfileRows,
+      compatibleHits,
+    );
+    if (compatible.length > 0) {
     reason = 'COMPATIBLE_SEEKINGS';
-    ranked = await rankCompatibleCandidates(myProfileRows, compatibleHits);
+      ranked = compatible;
+    } else {
+      const fallback = await rankProfileInterestFallback(
+        appUserId,
+        myProfileRows,
+        excludeIds,
+      );
+      reason = fallback.length > 0 ? 'PROFILE_FALLBACK' : 'EMPTY';
+      ranked = fallback;
+    }
   } else {
     const fallback = await rankProfileInterestFallback(appUserId, myProfileRows, excludeIds);
     reason = fallback.length > 0 ? 'PROFILE_FALLBACK' : 'EMPTY';
@@ -183,16 +211,18 @@ async function rankCompatibleCandidates(
   return candidateUserIds
     .map(userId => {
       const hit = hits.get(userId)!;
-      const score = normalizedWeightedOverlap(myProfileRows, rowsByUserId.get(userId) ?? []);
+      const candidateRows = rowsByUserId.get(userId) ?? [];
+      const score = normalizedWeightedOverlap(myProfileRows, candidateRows);
       return {
         userId,
         matchedGroupSize: hit.matchedGroupSize,
-        sharedSeekingInterestIds: [...hit.sharedSeekingInterestIds],
+        sharedInterestIds: sharedInterestIds(myProfileRows, candidateRows),
         sharedInterestCount: score.sharedInterestCount,
         matchScore: score.matchScore,
         rawMatchScore: score.rawMatchScore,
       };
     })
+    .filter((row) => row.sharedInterestCount > 0)
     .sort(
       (a, b) =>
         b.matchScore - a.matchScore ||
@@ -230,23 +260,14 @@ async function rankProfileInterestFallback(
     rowsByUserId.set(row.userId, list);
   }
 
-  // Track which interests the candidate shares with me so the UI can surface them.
-  const myInterestIdSet = new Set(myProfileRows.map(r => r.interestId));
-  const sharedByUser = new Map<string, Set<string>>();
-  for (const row of sharedRows) {
-    if (!myInterestIdSet.has(row.interestId)) continue;
-    const set = sharedByUser.get(row.userId) ?? new Set<string>();
-    set.add(row.interestId);
-    sharedByUser.set(row.userId, set);
-  }
-
   return candidateIds
-    .map(userId => {
-      const score = normalizedWeightedOverlap(myProfileRows, rowsByUserId.get(userId) ?? []);
+    .map((userId) => {
+      const candidateRows = rowsByUserId.get(userId) ?? [];
+      const score = normalizedWeightedOverlap(myProfileRows, candidateRows);
       return {
         userId,
         matchedGroupSize: null,
-        sharedSeekingInterestIds: [...(sharedByUser.get(userId) ?? new Set())],
+        sharedInterestIds: sharedInterestIds(myProfileRows, candidateRows),
         sharedInterestCount: score.sharedInterestCount,
         matchScore: score.matchScore,
         rawMatchScore: score.rawMatchScore,
@@ -338,7 +359,8 @@ async function hydrateDiscoveryUsers(
 
   const interestIdSet = new Set<string>();
   for (const row of profileInterestRows) interestIdSet.add(row.interestId);
-  for (const r of ranked) for (const i of r.sharedSeekingInterestIds) interestIdSet.add(i);
+  for (const r of ranked)
+    for (const i of r.sharedInterestIds) interestIdSet.add(i);
 
   const interestRows =
     interestIdSet.size === 0
@@ -370,8 +392,8 @@ async function hydrateDiscoveryUsers(
     const interests = (interestsByUser.get(r.userId) ?? []).sort(
       (a, b) => b.weight - a.weight || a.name.localeCompare(b.name),
     );
-    const sharedInterestNames = r.sharedSeekingInterestIds
-      .map(id => interestById.get(id)?.name)
+    const sharedInterestNames = r.sharedInterestIds
+      .map((id) => interestById.get(id)?.name)
       .filter((name): name is string => !!name);
     const loc = locations.get(r.userId);
     const photos = photosByUser.get(r.userId) ?? [];
