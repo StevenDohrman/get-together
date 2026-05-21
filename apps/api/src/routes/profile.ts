@@ -419,7 +419,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       select: { id: true },
     });
     const ownedSet = new Set(owned.map(p => p.id));
-    if (ids.length !== ownedSet.length || !ids.every(id => ownedSet.has(id))) {
+    if (ids.length !== ownedSet.size || !ids.every(id => ownedSet.has(id))) {
       return reply.status(400).send({
         error: 'photoIds must contain exactly your current photos with no duplicates',
       });

@@ -2,6 +2,7 @@ import { prismaClient as prisma } from '../db.js';
 import type { Prisma } from '@prisma/client';
 import { FormationInviteStatus, GroupFormationStatus } from '@prisma/client';
 import { getMutualYesUserIds } from './matchingDiscovery.js';
+import { healStuckProposalsForUser } from './groupFormation.js';
 
 export const publicInterestFieldSelect = { id: true, slug: true, name: true } as const;
 
@@ -96,7 +97,13 @@ export function formationCardFromProposalForUser(
 
 export async function listSerializedGroupSeekings(appUserId: string): Promise<GroupSeekingDto[]> {
   const list = await prisma.userGroupSeeking.findMany({
-    where: { userId: appUserId },
+    // A seeking is "consumed" once any of its proposals fulfills into a real
+    // group, so hide it from the active list. The row is kept for history /
+    // referential integrity but no longer drives discovery or formation.
+    where: {
+      userId: appUserId,
+      proposals: { none: { status: GroupFormationStatus.FULFILLED } },
+    },
     orderBy: { createdAt: 'asc' },
     include: {
       interests: {
@@ -132,6 +139,13 @@ export async function listMyFormationInviteCards(appUserId: string): Promise<For
 }
 
 export async function loadMatchingDashboard(appUserId: string) {
+  // Opportunistic heal: any proposals this user has an invite on that are
+  // stuck OPEN with all invites already ACCEPTED (e.g. from legacy data
+  // created before the dedupe/auto-accept fixes) get re-fulfilled here so
+  // the user's dashboard no longer shows phantom "Waiting on others" cards
+  // for groups they're already part of.
+  await healStuckProposalsForUser(appUserId);
+
   const [groupSeekings, openInvites, openFromMySeekings, mutualYesIds] = await Promise.all([
     listSerializedGroupSeekings(appUserId),
     prisma.groupFormationInvite.findMany({
@@ -157,12 +171,13 @@ export async function loadMatchingDashboard(appUserId: string) {
     .filter(inv => inv.status === FormationInviteStatus.PENDING)
     .map(inv => formationCardFromInvite(inv));
 
+  // Previously this filter also excluded proposals whose seeking belongs to
+  // the current user (because the seed user was auto-accepted and we didn't
+  // want to show them their own waiting card here — they had a per-seeking
+  // status chip instead). With auto-acceptance gone, every member of a
+  // proposal sees the same "Waiting on others" card once they've accepted.
   const openFormationsWaitingOnOthers = openInvites
-    .filter(
-      inv =>
-        inv.status === FormationInviteStatus.ACCEPTED &&
-        inv.proposal.userGroupSeeking.userId !== appUserId,
-    )
+    .filter(inv => inv.status === FormationInviteStatus.ACCEPTED)
     .map(inv => formationCardFromInvite(inv));
 
   const openFormationsFromMySeekings = openFromMySeekings.map(p => formationCardFromProposalForUser(p, appUserId));

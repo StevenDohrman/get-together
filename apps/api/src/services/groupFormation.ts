@@ -6,10 +6,19 @@ import {
   GroupRole,
   GroupSource,
   SwipeDecision,
+  type Prisma,
 } from '@prisma/client';
 import { getMutualYesUserIds } from './matchingDiscovery.js';
 import { normalizedWeightedOverlap, weightedVectorForInterestIds } from './matchingScoring.js';
 import { ensureProposalGroupChat } from './groupChat.js';
+
+/**
+ * Prisma client or transaction client. `maybeFulfillProposal` and other
+ * helpers accept this so they can run either standalone or as part of a
+ * caller's `$transaction`, keeping invite-status flips and proposal
+ * fulfillment atomic.
+ */
+type DbClient = typeof prisma | Prisma.TransactionClient;
 
 export const MAX_GROUP_SEEKINGS_PER_USER = 10;
 
@@ -187,6 +196,18 @@ export async function tryCreateFormationProposal(seedUserId: string, userGroupSe
     };
   }
 
+  // Dedupe across seekings: if another user's seeking already produced an
+  // OPEN proposal with the same exact member set (and target size), reuse
+  // that proposal instead of creating a sibling. This is the only way to
+  // guarantee a single canonical proposal per pair/set of users — and
+  // therefore the only way to guarantee that a group can only form once
+  // every member has explicitly accepted.
+  const memberIds = [seedUserId, ...chosen];
+  const sibling = await findOpenProposalWithMemberSet(memberIds, seeking.targetGroupSize);
+  if (sibling) {
+    return { ok: true as const, proposalId: sibling.id, reused: true as const };
+  }
+
   const proposal = await prisma.$transaction(async tx => {
     const prop = await tx.groupFormationProposal.create({
       data: {
@@ -194,14 +215,10 @@ export async function tryCreateFormationProposal(seedUserId: string, userGroupSe
         status: GroupFormationStatus.OPEN,
       },
     });
-    await tx.groupFormationInvite.create({
-      data: {
-        proposalId: prop.id,
-        userId: seedUserId,
-        status: FormationInviteStatus.ACCEPTED,
-      },
-    });
-    for (const uid of chosen) {
+    // No auto-acceptance: every member (including the user whose seeking
+    // triggered this proposal) must explicitly accept before the group is
+    // formed. See `respondFormationInvite`.
+    for (const uid of memberIds) {
       await tx.groupFormationInvite.create({
         data: {
           proposalId: prop.id,
@@ -213,8 +230,37 @@ export async function tryCreateFormationProposal(seedUserId: string, userGroupSe
     return prop;
   });
 
-  await maybeFulfillProposal(proposal.id);
   return { ok: true as const, proposalId: proposal.id, reused: false as const };
+}
+
+/**
+ * Find an OPEN proposal whose invite member set is exactly `memberIds` and
+ * whose underlying seeking has `targetGroupSize === expectedSize`. Used to
+ * collapse the dual-proposal case where both A's seeking and B's seeking
+ * would otherwise spawn parallel proposals for the same pair.
+ */
+async function findOpenProposalWithMemberSet(
+  memberIds: string[],
+  expectedSize: number,
+): Promise<{ id: string } | null> {
+  if (memberIds.length === 0) return null;
+  const candidates = await prisma.groupFormationProposal.findMany({
+    where: {
+      status: GroupFormationStatus.OPEN,
+      userGroupSeeking: { targetGroupSize: expectedSize },
+      // `every` is permissive (matches groups with no invites too), so we
+      // post-filter on exact membership below.
+      invites: { every: { userId: { in: memberIds } } },
+    },
+    include: { invites: { select: { userId: true } } },
+  });
+  return (
+    candidates.find(p => {
+      if (p.invites.length !== memberIds.length) return false;
+      const ids = new Set(p.invites.map(i => i.userId));
+      return memberIds.every(id => ids.has(id));
+    }) ?? null
+  );
 }
 
 export async function tryCreateFormationProposalsForUser(userId: string) {
@@ -253,8 +299,8 @@ export async function tryCreateFormationProposalsForUsers(userIds: string[]) {
   return results;
 }
 
-async function maybeFulfillProposal(proposalId: string) {
-  const proposal = await prisma.groupFormationProposal.findUnique({
+export async function maybeFulfillProposal(proposalId: string, db: DbClient = prisma) {
+  const proposal = await db.groupFormationProposal.findUnique({
     where: { id: proposalId },
     include: {
       invites: true,
@@ -273,49 +319,225 @@ async function maybeFulfillProposal(proposalId: string) {
   const accepted = proposal.invites.filter(i => i.status === FormationInviteStatus.ACCEPTED);
   if (accepted.length !== target) return;
 
+  const acceptedUserIds = accepted.map(inv => inv.userId);
+
+  // Idempotency / legacy-data safety net: if an APP_FORMED group with the
+  // exact same member set already exists (e.g. because the historical
+  // dual-proposal bug created one via a sibling proposal before this fix,
+  // or because two proposals raced past `findOpenProposalWithMemberSet` and
+  // both fulfilled concurrently), do NOT try to repoint this proposal's
+  // `formedGroupId` to that group — that column is `@unique` and the update
+  // would throw P2002 and leave the invite stuck as ACCEPTED with the
+  // proposal stuck as OPEN. Mark this proposal CANCELLED instead; the user
+  // already has access to the real group via membership.
+  const existingGroup = await findAppFormedGroupWithExactMembers(acceptedUserIds, db);
+  if (existingGroup) {
+    await db.groupFormationProposal.update({
+      where: { id: proposalId },
+      data: { status: GroupFormationStatus.CANCELLED },
+    });
+    await deleteShadowSeekings(
+      acceptedUserIds,
+      proposal.userGroupSeeking.targetGroupSize,
+      proposal.userGroupSeeking.interests.map(i => i.interestId),
+      db,
+    );
+    return;
+  }
+
   const interestNames = proposal.userGroupSeeking.interests.map(i => i.interest.name);
   const name =
     interestNames.length <= 2
       ? interestNames.join(' · ') || 'New group'
       : `${interestNames.slice(0, 2).join(' · ')} +${interestNames.length - 2}`;
 
-  await prisma.$transaction(async tx => {
-    let slug = `match-${proposal.id}`;
-    for (let i = 0; i < 5; i += 1) {
-      const clash = await tx.group.findUnique({ where: { slug } });
-      if (!clash) break;
-      slug = `match-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-    }
+  let slug = `match-${proposal.id}`;
+  for (let i = 0; i < 5; i += 1) {
+    const clash = await db.group.findUnique({ where: { slug } });
+    if (!clash) break;
+    slug = `match-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  }
 
-    const group = await tx.group.create({
-      data: {
-        slug,
-        name,
-        description: 'Formed from mutual matches',
-        source: GroupSource.APP_FORMED,
-        interests: {
-          create: proposal.userGroupSeeking.interests.map(ui => ({
-            interestId: ui.interestId,
-            weight: 7,
-          })),
-        },
-        members: {
-          create: accepted.map(inv => ({
-            userId: inv.userId,
-            role: GroupRole.MEMBER,
-          })),
-        },
+  const group = await db.group.create({
+    data: {
+      slug,
+      name,
+      description: 'Formed from mutual matches',
+      source: GroupSource.APP_FORMED,
+      interests: {
+        create: proposal.userGroupSeeking.interests.map(ui => ({
+          interestId: ui.interestId,
+          weight: 7,
+        })),
       },
-    });
-
-    await tx.groupFormationProposal.update({
-      where: { id: proposalId },
-      data: {
-        status: GroupFormationStatus.FULFILLED,
-        formedGroupId: group.id,
+      members: {
+        create: accepted.map(inv => ({
+          userId: inv.userId,
+          role: GroupRole.MEMBER,
+        })),
       },
-    });
+    },
   });
+
+  await db.groupFormationProposal.update({
+    where: { id: proposalId },
+    data: {
+      status: GroupFormationStatus.FULFILLED,
+      formedGroupId: group.id,
+    },
+  });
+
+  // Cancel any leftover OPEN sibling proposals between the same members
+  // (defensive — `findOpenProposalWithMemberSet` should prevent these from
+  // being created in the first place, but legacy data may still have them).
+  await cancelSiblingOpenProposals(proposal.id, acceptedUserIds, target, db);
+
+  // Clean up "shadow seekings": other seekings from the same members that
+  // share the same size + interest profile and would otherwise keep showing
+  // up as "Discovering" on the dashboard now that those users are already
+  // grouped together for that exact profile.
+  await deleteShadowSeekings(
+    acceptedUserIds,
+    proposal.userGroupSeeking.targetGroupSize,
+    proposal.userGroupSeeking.interests.map(i => i.interestId),
+    db,
+  );
+}
+
+/**
+ * Find an APP_FORMED group whose member set is exactly `userIds` (no more, no less).
+ *
+ * Note: this is a best-effort dedupe and is not fully race-safe under
+ * simultaneous concurrent fulfillment. If both proposals fulfill at the same
+ * instant they can still race past this check and create two groups. A
+ * follow-up could add a unique constraint on a deterministic member-set key
+ * to make this race-free, but the sequential case (two users accepting
+ * invites at different times) is the realistic scenario and is fully handled.
+ */
+async function findAppFormedGroupWithExactMembers(
+  userIds: string[],
+  db: DbClient = prisma,
+): Promise<{ id: string } | null> {
+  if (userIds.length === 0) return null;
+  const groups = await db.group.findMany({
+    where: {
+      source: GroupSource.APP_FORMED,
+      members: { every: { userId: { in: userIds } } },
+    },
+    select: {
+      id: true,
+      _count: { select: { members: true } },
+    },
+  });
+  return groups.find(g => g._count.members === userIds.length) ?? null;
+}
+
+/**
+ * Cancel any OTHER OPEN proposals whose invite member set equals `memberIds`
+ * (and matching target size). These would be from sibling seekings that
+ * shadow the just-fulfilled proposal; leaving them OPEN would leave stuck
+ * cards on members' dashboards and re-introduce the dual-proposal hazard.
+ */
+async function cancelSiblingOpenProposals(
+  fulfilledProposalId: string,
+  memberIds: string[],
+  expectedSize: number,
+  db: DbClient,
+): Promise<void> {
+  if (memberIds.length === 0) return;
+  const siblings = await db.groupFormationProposal.findMany({
+    where: {
+      id: { not: fulfilledProposalId },
+      status: GroupFormationStatus.OPEN,
+      userGroupSeeking: { targetGroupSize: expectedSize },
+      invites: { every: { userId: { in: memberIds } } },
+    },
+    include: { invites: { select: { userId: true } } },
+  });
+  const exact = siblings.filter(
+    p =>
+      p.invites.length === memberIds.length &&
+      memberIds.every(id => p.invites.some(i => i.userId === id)),
+  );
+  for (const p of exact) {
+    await db.groupFormationProposal.update({
+      where: { id: p.id },
+      data: { status: GroupFormationStatus.CANCELLED },
+    });
+  }
+}
+
+/**
+ * Delete seekings owned by any of `userIds` that share the same target
+ * group size and interest set as the just-formed group. These "shadow
+ * seekings" would otherwise sit on the dashboard as "Discovering" even
+ * though the user has already been placed into a group matching that
+ * exact profile.
+ *
+ * Matching seekings whose own proposal already drove this fulfillment are
+ * preserved by the FULFILLED-status filter (their `proposals: { some: { status: FULFILLED } }`
+ * branch is hidden by the existing dashboard query), so we only need to
+ * remove the other-seekings-that-never-fulfilled.
+ */
+async function deleteShadowSeekings(
+  userIds: string[],
+  targetGroupSize: number,
+  interestIds: string[],
+  db: DbClient,
+): Promise<void> {
+  if (userIds.length === 0 || interestIds.length === 0) return;
+  const expectedInterestSetSize = interestIds.length;
+
+  // Find candidate seekings owned by these users with matching size and a
+  // matching interest count, then verify exact interest set in JS.
+  const candidates = await db.userGroupSeeking.findMany({
+    where: {
+      userId: { in: userIds },
+      targetGroupSize,
+      // No FULFILLED proposal (those are the canonical post-fulfill seekings
+      // already hidden by the dashboard filter).
+      proposals: { none: { status: GroupFormationStatus.FULFILLED } },
+      interests: { every: { interestId: { in: interestIds } } },
+    },
+    include: { interests: { select: { interestId: true } } },
+  });
+
+  const interestSet = new Set(interestIds);
+  const toDelete = candidates.filter(
+    s =>
+      s.interests.length === expectedInterestSetSize &&
+      s.interests.every(i => interestSet.has(i.interestId)),
+  );
+
+  for (const s of toDelete) {
+    await db.userGroupSeeking.delete({ where: { id: s.id } });
+  }
+}
+
+/**
+ * Opportunistically heal proposals that are stuck OPEN with all invites
+ * ACCEPTED — e.g. from legacy data created before the dedupe/auto-accept
+ * fixes landed. Called from the dashboard endpoint so users naturally
+ * get unstuck on next page load without a separate migration.
+ */
+export async function healStuckProposalsForUser(userId: string): Promise<void> {
+  const candidateInvites = await prisma.groupFormationInvite.findMany({
+    where: {
+      userId,
+      proposal: { status: GroupFormationStatus.OPEN },
+    },
+    select: { proposalId: true },
+  });
+  const proposalIds = [...new Set(candidateInvites.map(i => i.proposalId))];
+  for (const proposalId of proposalIds) {
+    try {
+      await maybeFulfillProposal(proposalId);
+    } catch {
+      // Best-effort heal; swallow per-proposal errors so a single bad row
+      // can't break the entire dashboard load. The bug being healed here
+      // was originally a P2002 thrown out of this exact path.
+    }
+  }
 }
 
 export async function respondFormationInvite(
@@ -338,11 +560,19 @@ export async function respondFormationInvite(
   }
 
   if (accept) {
-    await prisma.groupFormationInvite.update({
-      where: { id: invite.id },
-      data: { status: FormationInviteStatus.ACCEPTED },
+    // Atomic: invite flip + fulfillment check happen together so we can
+    // never end up with `status=ACCEPTED` invites under an `OPEN` proposal
+    // (the "2/2 accepted · 0 pending, still waiting" stuck state).
+    await prisma.$transaction(async tx => {
+      await tx.groupFormationInvite.update({
+        where: { id: invite.id },
+        data: { status: FormationInviteStatus.ACCEPTED },
+      });
+      await maybeFulfillProposal(proposalId, tx);
     });
-    await maybeFulfillProposal(proposalId);
+    // Chat side-effect runs outside the txn — if it fails, the accept is
+    // still durable and the chat will be lazily ensured on the next
+    // interaction with the proposal.
     await ensureProposalGroupChat(proposalId);
     return { ok: true as const };
   }
