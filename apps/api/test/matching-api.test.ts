@@ -989,10 +989,13 @@ describe('matching APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json(), { proposalId: PROPOSAL_ID, reused: false });
+    // No more seed auto-acceptance: every member (including the user whose
+    // seeking spawned the proposal) starts PENDING. The group can only
+    // form once everyone explicitly accepts via the respond endpoint.
     assert.deepEqual(
       state.formationInvites.map(inv => [inv.userId, inv.status]),
       [
-        [ME, FormationInviteStatus.ACCEPTED],
+        [ME, FormationInviteStatus.PENDING],
         [USER_B, FormationInviteStatus.PENDING],
       ],
     );
@@ -1041,7 +1044,7 @@ describe('matching APIs', () => {
     assert.equal(state.formationProposals.length, 0);
   });
 
-  it('runs group formation checks after a yes swipe', async () => {
+  it('runs group formation checks after a yes swipe and dedupes parallel proposals across seekings', async () => {
     state.groupSeekings[0].targetGroupSize = 2;
     state.userInterests.push(
       { userId: ME, interestId: INTEREST_A, weight: 10 },
@@ -1066,13 +1069,18 @@ describe('matching APIs', () => {
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.json().ok, true);
-    assert.equal(state.formationProposals.length, 2);
+    // Previously this swipe spawned one proposal per user's seeking (so 2
+    // proposals with the same member set, which then collided on the unique
+    // `formedGroupId` index when both tried to fulfill). With creation-time
+    // dedupe there is exactly one canonical proposal for the {ME, USER_A}
+    // pair, and both members start PENDING.
+    assert.equal(state.formationProposals.length, 1);
     assert.deepEqual(
-      state.formationInvites.slice(0, 2).map(inv => [inv.userId, inv.status]),
+      state.formationInvites.map(inv => [inv.userId, inv.status]).sort(),
       [
-        [ME, FormationInviteStatus.ACCEPTED],
+        [ME, FormationInviteStatus.PENDING],
         [USER_A, FormationInviteStatus.PENDING],
-      ],
+      ].sort(),
     );
   });
 
@@ -1137,18 +1145,24 @@ describe('matching APIs', () => {
     );
   });
 
-  it('reuses a single group when two opposing proposals fulfill for the same member set', async () => {
-    // Scenario: A and B each own a size-2 group seeking on the same interest.
-    // Mutual yes spawns proposal_a (A=ACCEPTED, B=PENDING) and proposal_b
-    // (B=ACCEPTED, A=PENDING). A accepts proposal_b first → group formed.
-    // B accepts proposal_a second → must reuse the same group instead of
-    // creating a duplicate.
+  it('cancels sibling open proposals (legacy dual-proposal data) when one fulfills, without violating the unique formedGroupId constraint', async () => {
+    // Pre-fix scenario: A and B each own a size-2 group seeking on the same
+    // interest, and mutual-yes once spawned two parallel proposals
+    // (proposal_a from A's seeking, proposal_b from B's seeking) with the
+    // same {A, B} member set. The old code auto-accepted the seed user and
+    // tried to point BOTH proposals at the same formed group, which violated
+    // the `formedGroupId @unique` index and 500'd the second acceptance.
+    //
+    // After the fix:
+    //   - Step 1 fulfills proposal_b and immediately CANCELS proposal_a
+    //     (and tries to delete USER_A's now-redundant shadow seeking).
+    //   - Step 2 (USER_B trying to accept the now-cancelled proposal_a)
+    //     returns a polite 400 instead of a 500 unique-constraint blowup.
     const SEEKING_A = '20000000-0000-4000-8000-0000000000aa';
     const SEEKING_B = '20000000-0000-4000-8000-0000000000bb';
     const PROPOSAL_A = '30000000-0000-4000-8000-0000000000aa';
     const PROPOSAL_B = '30000000-0000-4000-8000-0000000000bb';
 
-    // Replace the default ME seeking so only A/B's seekings exist under test.
     state.groupSeekings = [
       {
         id: SEEKING_A,
@@ -1186,8 +1200,9 @@ describe('matching APIs', () => {
         updatedAt: new Date(),
       },
     );
+    // Simulate legacy data: both proposals already have their "seed" user
+    // auto-ACCEPTED from before the auto-accept removal landed.
     state.formationInvites.push(
-      // proposal_a: A accepted (seed), B pending
       {
         id: '40000000-0000-4000-8000-0000000000a1',
         proposalId: PROPOSAL_A,
@@ -1204,7 +1219,6 @@ describe('matching APIs', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-      // proposal_b: B accepted (seed), A pending
       {
         id: '40000000-0000-4000-8000-0000000000b1',
         proposalId: PROPOSAL_B,
@@ -1223,9 +1237,6 @@ describe('matching APIs', () => {
       },
     );
 
-    // Use a per-test mock whose identity is swapped between steps via a token
-    // (`user-a` vs `user-b`). Registering routes against a fresh Fastify
-    // instance per step also works, but a shared mock keeps the test compact.
     const dualSupabase = {
       auth: {
         getUser: async (token: string) => {
@@ -1239,7 +1250,7 @@ describe('matching APIs', () => {
     const app = Fastify({ logger: false });
     registerMatchingRoutes(app, { supabaseAdmin: dualSupabase });
 
-    // Step 1: USER_A accepts proposal_b — group is formed.
+    // Step 1: USER_A accepts proposal_b → group formed.
     let resp = await app.inject({
       method: 'POST',
       url: `/matching/formation/proposals/${PROPOSAL_B}/invites/respond`,
@@ -1249,27 +1260,41 @@ describe('matching APIs', () => {
     assert.equal(resp.statusCode, 200);
     assert.equal(state.groups.length, 1, 'first acceptance creates exactly one group');
 
-    // Step 2: USER_B accepts proposal_a — must REUSE the group.
+    const propB = state.formationProposals.find(p => p.id === PROPOSAL_B);
+    const propA = state.formationProposals.find(p => p.id === PROPOSAL_A);
+    assert.equal(propB?.status, GroupFormationStatus.FULFILLED);
+    assert.equal(propB?.formedGroupId, state.groups[0]?.id);
+    // The sibling proposal must be CANCELLED (not FULFILLED + duplicate
+    // formedGroupId) so we never trip the unique constraint.
+    assert.equal(propA?.status, GroupFormationStatus.CANCELLED);
+    assert.equal(propA?.formedGroupId, null);
+
+    // USER_A's shadow seeking (same size + interest as the formed group, no
+    // FULFILLED proposal of its own) gets cleaned up so it doesn't sit on
+    // the dashboard as "Discovering" forever.
+    assert.equal(
+      state.groupSeekings.find(s => s.id === SEEKING_A),
+      undefined,
+      "USER_A's shadow seeking should be cleaned up after the group forms",
+    );
+    // USER_B's seeking is preserved by the dashboard filter (it has the
+    // FULFILLED proposal_b attached), so we don't auto-delete it here.
+    assert.ok(state.groupSeekings.find(s => s.id === SEEKING_B));
+
+    // Step 2: USER_B tries to accept the now-cancelled proposal_a. Should
+    // get a polite 400 instead of the legacy P2002 500.
     resp = await app.inject({
       method: 'POST',
       url: `/matching/formation/proposals/${PROPOSAL_A}/invites/respond`,
       headers: { authorization: 'Bearer user-b' },
       payload: { accept: true },
     });
-    assert.equal(resp.statusCode, 200);
+    assert.equal(resp.statusCode, 400);
+    assert.match(resp.json().error, /no longer open/i);
     assert.equal(state.groups.length, 1, 'second acceptance must NOT create a second group');
 
-    // Both proposals end FULFILLED pointing at the same group.
-    const propA = state.formationProposals.find(p => p.id === PROPOSAL_A);
-    const propB = state.formationProposals.find(p => p.id === PROPOSAL_B);
-    assert.equal(propA?.status, GroupFormationStatus.FULFILLED);
-    assert.equal(propB?.status, GroupFormationStatus.FULFILLED);
-    assert.equal(propA?.formedGroupId, state.groups[0]?.id);
-    assert.equal(propB?.formedGroupId, state.groups[0]?.id);
-
-    // Exactly one chat, both users members of it (no duplicate chat for the
-    // second proposal even though that proposal now points at the same group).
-    assert.equal(state.groupChats.length, 1, 'second proposal reuses the existing chat');
+    // Exactly one chat, both users members of it.
+    assert.equal(state.groupChats.length, 1);
     assert.deepEqual(
       state.groupChatMembers
         .filter(m => m.chatId === state.groupChats[0]?.id)
@@ -1277,6 +1302,70 @@ describe('matching APIs', () => {
         .sort(),
       [USER_A, USER_B].sort(),
     );
+  });
+
+  it('heals stuck-OPEN proposals (all invites already ACCEPTED) on dashboard load', async () => {
+    // Reproduces the user-visible bug: B sees a "WAITING ON OTHERS · 2/2
+    // accepted · 0 pending" card forever because a legacy P2002 left an
+    // invite ACCEPTED under an OPEN proposal pointing at a group that was
+    // already formed by a sibling proposal.
+    const PROPOSAL_STUCK = '30000000-0000-4000-8000-0000000000ee';
+    const EXISTING_GROUP_ID = '50000000-0000-4000-8000-0000000000ff';
+
+    // Shrink ME's default seeking to a 2-person group so the stuck proposal
+    // reproduction has exactly 2 ACCEPTED invites === target.
+    state.groupSeekings[0].targetGroupSize = 2;
+
+    state.groups.push({
+      id: EXISTING_GROUP_ID,
+      slug: 'match-ee',
+      name: '3D Printing',
+      createdById: '',
+      source: GroupSource.APP_FORMED,
+      memberIds: [ME, USER_A],
+    });
+    state.formationProposals.push({
+      id: PROPOSAL_STUCK,
+      userGroupSeekingId: SEEKING_ID,
+      status: GroupFormationStatus.OPEN,
+      formedGroupId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    state.formationInvites.push(
+      {
+        id: '40000000-0000-4000-8000-0000000000e1',
+        proposalId: PROPOSAL_STUCK,
+        userId: ME,
+        status: FormationInviteStatus.ACCEPTED,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '40000000-0000-4000-8000-0000000000e2',
+        proposalId: PROPOSAL_STUCK,
+        userId: USER_A,
+        status: FormationInviteStatus.ACCEPTED,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    );
+
+    const response = await makeApp().inject({
+      method: 'GET',
+      url: '/me/matching/dashboard',
+      headers: authHeaders(),
+    });
+
+    assert.equal(response.statusCode, 200);
+    // Heal should have cancelled the stuck proposal (existing group already
+    // owns this member set, so we can't repoint formedGroupId without
+    // tripping the unique constraint).
+    const healed = state.formationProposals.find(p => p.id === PROPOSAL_STUCK);
+    assert.equal(healed?.status, GroupFormationStatus.CANCELLED);
+    assert.equal(healed?.formedGroupId, null);
+    // No phantom "Waiting on others" card on the dashboard.
+    assert.deepEqual(response.json().openFormationsWaitingOnOthers, []);
   });
 
   it('hides seekings from the dashboard once their proposal has been fulfilled', async () => {
