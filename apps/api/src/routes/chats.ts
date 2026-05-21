@@ -1,9 +1,10 @@
-import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prismaClient as prisma } from '../db.js';
 import { requireAppUser } from '../requireAppUser.js';
 import { isChatMember } from '../services/groupChat.js';
+import { SocketMessageType, type TextMessagePayload } from '../types/socket.js';
 
 export type ChatsRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
@@ -15,7 +16,10 @@ const sendMessageBody = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
-export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) {
+export function registerChatsRoutes(
+  app: FastifyInstance,
+  deps: ChatsRouteDeps,
+) {
   const { supabaseAdmin } = deps;
 
   app.get('/me/chats', async (req, reply) => {
@@ -29,7 +33,9 @@ export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) 
         chat: {
           include: {
             group: { select: { id: true, slug: true, name: true } },
-            proposal: { select: { id: true, status: true, formedGroupId: true } },
+            proposal: {
+              select: { id: true, status: true, formedGroupId: true },
+            },
             _count: { select: { members: true } },
           },
         },
@@ -37,7 +43,7 @@ export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) 
     });
 
     return reply.send({
-      chats: memberships.map(m => ({
+      chats: memberships.map((m) => ({
         id: m.chatId,
         memberCount: m.chat._count.members,
         createdAt: m.chat.createdAt,
@@ -51,14 +57,20 @@ export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) 
     const row = await requireAppUser(req, reply, supabaseAdmin);
     if (!row) return;
 
-    const chatId = z.string().uuid().safeParse((req.params as { chatId?: string }).chatId);
-    if (!chatId.success) return reply.status(400).send({ error: 'Invalid chatId' });
+    const chatId = z
+      .string()
+      .uuid()
+      .safeParse((req.params as { chatId?: string }).chatId);
+    if (!chatId.success)
+      return reply.status(400).send({ error: 'Invalid chatId' });
 
     if (!(await isChatMember(chatId.data, row.id))) {
       return reply.status(403).send({ error: 'Not a chat member' });
     }
 
-    const parsed = z.object({ limit: limitQuery.optional() }).safeParse(req.query ?? {});
+    const parsed = z
+      .object({ limit: limitQuery.optional() })
+      .safeParse(req.query ?? {});
     if (!parsed.success) {
       return reply.status(400).send({
         error: 'Invalid query',
@@ -77,15 +89,32 @@ export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) 
     });
 
     return reply.send({
-      messages: [...messages].reverse().map(m => ({
-        id: m.id,
-        chatId: m.chatId,
-        sender: m.sender,
-        kind: m.kind,
-        body: m.body,
-        payload: m.payload,
-        createdAt: m.createdAt,
-      })),
+      messages: [...messages].reverse().map((m) => {
+        // Evaluate db kind to socket type
+        // TODO: Map 'ACTIVITY' db kind to 'activity' when added to Prisma ChatMessageKind
+        let type: SocketMessageType =
+          m.kind === 'TEXT' ? SocketMessageType.TEXT : SocketMessageType.SYSTEM;
+
+        // Attempt to detect if a SYSTEM message was actually storing an activity
+        // (Temporary backwards-compatibility heuristic)
+        if (
+          m.kind === 'SYSTEM' &&
+          m.payload &&
+          typeof m.payload === 'object' &&
+          'activityId' in m.payload
+        ) {
+          type = SocketMessageType.ACTIVITY;
+        }
+
+        return {
+          id: m.id,
+          chatId: m.chatId,
+          sender: m.sender,
+          type,
+          payload: m.payload ?? (m.kind === 'TEXT' ? { body: m.body } : {}),
+          createdAt: m.createdAt.toISOString(),
+        };
+      }),
     });
   });
 
@@ -93,8 +122,12 @@ export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) 
     const row = await requireAppUser(req, reply, supabaseAdmin);
     if (!row) return;
 
-    const chatId = z.string().uuid().safeParse((req.params as { chatId?: string }).chatId);
-    if (!chatId.success) return reply.status(400).send({ error: 'Invalid chatId' });
+    const chatId = z
+      .string()
+      .uuid()
+      .safeParse((req.params as { chatId?: string }).chatId);
+    if (!chatId.success)
+      return reply.status(400).send({ error: 'Invalid chatId' });
 
     if (!(await isChatMember(chatId.data, row.id))) {
       return reply.status(403).send({ error: 'Not a chat member' });
@@ -124,10 +157,9 @@ export function registerChatsRoutes(app: FastifyInstance, deps: ChatsRouteDeps) 
         id: created.id,
         chatId: created.chatId,
         sender: created.sender,
-        kind: created.kind,
-        body: created.body,
-        payload: created.payload,
-        createdAt: created.createdAt,
+        type: SocketMessageType.TEXT,
+        payload: { body: created.body } as TextMessagePayload,
+        createdAt: created.createdAt.toISOString(),
       },
     });
   });
