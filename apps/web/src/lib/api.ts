@@ -63,17 +63,27 @@ export async function apiJson<T>(
     throw new Error('Not signed in');
   }
   const headers = new Headers();
-  headers.set('Content-Type', 'application/json');
   headers.set('Authorization', `Bearer ${token}`);
+  // Only declare a JSON content-type when we actually send a body — Fastify
+  // rejects an empty body when content-type is application/json (e.g. for
+  // DELETE requests with no payload).
+  const serialized = body === undefined ? undefined : JSON.stringify(body);
+  if (serialized !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   const response = await fetch(getApiUrl(path), {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: serialized,
   });
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return (await response.json()) as T;

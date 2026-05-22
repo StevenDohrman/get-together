@@ -3,8 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prismaClient as prisma } from '../db.js';
 import { requireAppUser } from '../requireAppUser.js';
+import { toEventPayload } from '../services/chatEvents.js';
 import { isChatMember } from '../services/groupChat.js';
-import { SocketMessageType, type TextMessagePayload } from '../types/socket.js';
+import {
+  SocketMessageType,
+  type ChatMessage,
+  type TextMessagePayload,
+} from '../types/socket.js';
 
 export type ChatsRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
@@ -85,37 +90,65 @@ export function registerChatsRoutes(
       take: limit,
       include: {
         sender: { select: { id: true, username: true, displayName: true } },
+        event: {
+          include: {
+            attendees: {
+              include: {
+                user: {
+                  select: { id: true, username: true, displayName: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
-    return reply.send({
-      messages: [...messages].reverse().map((m) => {
-        // Evaluate db kind to socket type
-        // TODO: Map 'ACTIVITY' db kind to 'activity' when added to Prisma ChatMessageKind
-        let type: SocketMessageType =
-          m.kind === 'TEXT' ? SocketMessageType.TEXT : SocketMessageType.SYSTEM;
-
-        // Attempt to detect if a SYSTEM message was actually storing an activity
-        // (Temporary backwards-compatibility heuristic)
-        if (
-          m.kind === 'SYSTEM' &&
-          m.payload &&
-          typeof m.payload === 'object' &&
-          'activityId' in m.payload
-        ) {
-          type = SocketMessageType.ACTIVITY;
-        }
-
+    const items: ChatMessage[] = [...messages].reverse().map((m) => {
+      if (m.kind === 'EVENT' && m.event) {
         return {
           id: m.id,
           chatId: m.chatId,
           sender: m.sender,
-          type,
-          payload: m.payload ?? (m.kind === 'TEXT' ? { body: m.body } : {}),
+          type: SocketMessageType.EVENT,
+          payload: toEventPayload(m.event),
           createdAt: m.createdAt.toISOString(),
         };
-      }),
+      }
+
+      if (m.kind === 'SYSTEM') {
+        const payload =
+          m.payload && typeof m.payload === 'object'
+            ? (m.payload as Record<string, unknown>)
+            : { body: m.body };
+        return {
+          id: m.id,
+          chatId: m.chatId,
+          sender: m.sender,
+          type: SocketMessageType.SYSTEM,
+          payload: payload as { body: string },
+          createdAt: m.createdAt.toISOString(),
+        };
+      }
+
+      // TEXT (default). Prefer stored payload (which clients set), but fall
+      // back to the bare `body` field for messages persisted via REST.
+      const textPayload: TextMessagePayload =
+        m.payload && typeof m.payload === 'object' && 'body' in m.payload
+          ? (m.payload as unknown as TextMessagePayload)
+          : { body: m.body };
+
+      return {
+        id: m.id,
+        chatId: m.chatId,
+        sender: m.sender,
+        type: SocketMessageType.TEXT,
+        payload: textPayload,
+        createdAt: m.createdAt.toISOString(),
+      };
     });
+
+    return reply.send({ messages: items });
   });
 
   app.post('/me/chats/:chatId/messages', async (req, reply) => {

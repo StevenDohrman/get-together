@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FastifyInstance } from 'fastify';
 import type { Socket, Server as SocketIOServer } from 'socket.io';
@@ -8,9 +9,12 @@ import {
   SOCKET_EVENTS,
   SocketMessageType,
   type ChatMessage,
+  type EventMessagePayload,
+  type EventUpdatedPayload,
   type MessagePayload,
   type TextMessagePayload,
 } from '../types/socket.js';
+import { getEventById, toEventPayload } from './chatEvents.js';
 import { isChatMember } from './groupChat.js';
 
 /**
@@ -77,7 +81,6 @@ export class ChatSocketService {
       socket.disconnect(true);
       return;
     }
-    // logger.debug(`User ${userId} connected (socket: ${socket.id})`);
   }
 
   /**
@@ -100,23 +103,19 @@ export class ChatSocketService {
         return;
       }
 
-      // Verify user is a member of this chat
       const isMember = await isChatMember(chatId, userId);
       if (!isMember) {
         callback?.(ackError('Not a chat member'));
         return;
       }
 
-      // Track subscription
       if (!this.userChatSubscriptions.has(userId)) {
         this.userChatSubscriptions.set(userId, new Set());
       }
       this.userChatSubscriptions.get(userId)!.add(chatId);
 
-      // Join socket room named after chatId
       socket.join(chatId);
 
-      // Notify others in the chat
       socket.to(chatId).emit(SOCKET_EVENTS.USER_JOINED, {
         userId,
         timestamp: new Date().toISOString(),
@@ -150,11 +149,9 @@ export class ChatSocketService {
         return;
       }
 
-      // Remove subscription
       this.userChatSubscriptions.get(userId)?.delete(chatId);
       socket.leave(chatId);
 
-      // Notify others in the chat
       socket.to(chatId).emit(SOCKET_EVENTS.USER_LEFT, {
         userId,
         timestamp: new Date().toISOString(),
@@ -169,7 +166,13 @@ export class ChatSocketService {
   }
 
   /**
-   * Handle sending a message
+   * Handle sending a message.
+   *
+   * Text messages persist their `body` in the message row. Event messages
+   * are not created through this path — clients call `POST /me/chats/:id/
+   * events` so the server can validate the proposal payload, persist the
+   * `Event` row, and broadcast a hydrated wire message. Attempting to send
+   * an EVENT through here is rejected with a helpful error.
    */
   private async handleSendMessage(
     socket: Socket,
@@ -206,18 +209,22 @@ export class ChatSocketService {
         return;
       }
 
-      // Verify user is a member of this chat
       const isMember = await isChatMember(chatId, userId);
       if (!isMember) {
         callback?.(ackError('Not a chat member'));
         return;
       }
 
+      if (messageType === SocketMessageType.EVENT) {
+        callback?.(
+          ackError(
+            'Event messages must be created via POST /me/chats/:chatId/events',
+          ),
+        );
+        return;
+      }
+
       // Ensure the sender's socket is in the room before we broadcast.
-      // Normally the client emits `chat:join` first, but if that never
-      // landed (e.g. raced with reconnect/auth refresh) the broadcast
-      // below would otherwise skip the sender and their own message
-      // wouldn't appear in their UI.
       if (!socket.rooms.has(chatId)) {
         socket.join(chatId);
         if (!this.userChatSubscriptions.has(userId)) {
@@ -226,31 +233,25 @@ export class ChatSocketService {
         this.userChatSubscriptions.get(userId)!.add(chatId);
       }
 
-      // Save message to database
-      // Temporary mapping until ACTIVITY is added to Prisma ChatMessageKind
-      let dbKind: 'TEXT' | 'SYSTEM' = 'TEXT';
-      if (messageType === SocketMessageType.SYSTEM) dbKind = 'SYSTEM';
-      // If messageType is 'activity', map it to 'SYSTEM' as a fallback for now.
-      // TODO: Change this to 'ACTIVITY' once ChatMessageKind is updated in Prisma
-      else if (messageType === SocketMessageType.ACTIVITY) dbKind = 'SYSTEM';
+      const dbKind = messageType === SocketMessageType.SYSTEM ? 'SYSTEM' : 'TEXT';
+      const body =
+        messageType === SocketMessageType.TEXT
+          ? (payload as TextMessagePayload).body
+          : '';
 
       const message = await prisma.groupChatMessage.create({
         data: {
           chatId,
           senderId: userId,
           kind: dbKind,
-          body:
-            messageType === SocketMessageType.TEXT
-              ? (payload as TextMessagePayload).body
-              : '',
-          payload: payload,
+          body,
+          payload: payload as unknown as Prisma.InputJsonValue,
         },
         include: {
           sender: { select: { id: true, username: true, displayName: true } },
         },
       });
 
-      // Transform to socket message format
       const socketMessage: ChatMessage = {
         id: message.id,
         chatId: message.chatId,
@@ -260,7 +261,6 @@ export class ChatSocketService {
         createdAt: message.createdAt.toISOString(),
       };
 
-      // Broadcast to all users in the chat (including sender)
       this.io.to(chatId).emit(SOCKET_EVENTS.MESSAGE_RECEIVED, socketMessage);
 
       callback?.(null, socketMessage);
@@ -282,7 +282,6 @@ export class ChatSocketService {
 
     const subscriptions = this.userChatSubscriptions.get(userId);
     if (subscriptions) {
-      // Notify all chats this user was in
       subscriptions.forEach((chatId) => {
         socket.to(chatId).emit(SOCKET_EVENTS.USER_LEFT, {
           userId,
@@ -295,10 +294,38 @@ export class ChatSocketService {
   }
 
   /**
-   * Broadcast message to specific chat (for server-initiated messages)
+   * Broadcast a fully-formed chat message to everyone in a chat. Used by
+   * REST routes (e.g. event creation) that persist messages outside the
+   * socket pipeline but still want every connected client to receive them.
    */
   public broadcastMessage(chatId: string, message: ChatMessage): void {
     this.io.to(chatId).emit(SOCKET_EVENTS.MESSAGE_RECEIVED, message);
+  }
+
+  /**
+   * Broadcast that an event's mutable state changed (e.g. someone RSVP'd).
+   * Clients should replace any cached copy of this event with the snapshot
+   * carried in the payload.
+   */
+  public broadcastEventUpdated(
+    chatId: string,
+    payload: EventMessagePayload,
+  ): void {
+    const update: EventUpdatedPayload = { chatId, event: payload };
+    this.io.to(chatId).emit(SOCKET_EVENTS.EVENT_UPDATED, update);
+  }
+
+  /**
+   * Re-fetch an event from the DB and broadcast it. Convenience wrapper
+   * so callers don't need to know about the wire shape.
+   */
+  public async refreshAndBroadcastEvent(
+    chatId: string,
+    eventId: string,
+  ): Promise<void> {
+    const event = await getEventById(eventId);
+    if (!event) return;
+    this.broadcastEventUpdated(chatId, toEventPayload(event));
   }
 
   /**
@@ -322,7 +349,6 @@ export function createSocketServer(
   fastifyInstance: FastifyInstance,
   supabaseAdmin: SupabaseClient | null,
 ): { io: SocketIOServer; service: ChatSocketService } {
-  // Determine CORS origins
   const corsOrigins = process.env.API_CORS_ORIGINS
     ? process.env.API_CORS_ORIGINS.split(',').map((s: string) => s.trim())
     : process.env.NODE_ENV === 'production'
@@ -339,9 +365,9 @@ export function createSocketServer(
       origin: corsOrigins.length === 0 ? true : corsOrigins,
       methods: ['GET', 'POST'],
       credentials: true,
-      allowEIO3: true,
     },
     transports: ['websocket', 'polling'],
+    allowEIO3: true,
   });
 
   // Authentication middleware: validate the Supabase access token and

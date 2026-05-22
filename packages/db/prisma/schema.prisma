@@ -47,6 +47,10 @@ enum FormationInviteStatus {
 enum ChatMessageKind {
   TEXT
   SYSTEM
+  /// Proposal for the group to do something together (title + place + time +
+  /// per-member RSVPs). The structured data lives in `Event`; the
+  /// `GroupChatMessage` row only references it via `eventId`.
+  EVENT
 }
 
 model Interest {
@@ -219,6 +223,12 @@ model GroupChatMessage {
   body    String
   payload Json?
 
+  /// When `kind = EVENT`, the structured proposal that this message
+  /// announces. One event has at most one announcing chat message, so this
+  /// is unique.
+  eventId String? @unique @map("event_id") @db.Uuid
+  event   Event?  @relation("EventAnnounceMessage", fields: [eventId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
 
   @@index([chatId, createdAt])
@@ -373,6 +383,11 @@ model Event {
 
   attendees          EventAttendee[]
   subscribedByGroups GroupEventSubscription[]
+
+  /// When this event was first proposed inside a group chat, the
+  /// chat message that announced it. Optional because events created
+  /// outside the chat flow have none.
+  announceMessage GroupChatMessage? @relation("EventAnnounceMessage")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

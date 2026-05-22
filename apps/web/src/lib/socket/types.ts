@@ -13,33 +13,44 @@ export interface TextMessagePayload {
   body: string;
 }
 
-export interface ActivityMessagePayload {
-  location?: {
-    name: string;
-    lat?: number;
-    lng?: number;
-  };
-  time?: {
-    startTime: string;
-    endTime?: string;
-  };
-  acceptedCount?: number;
-  description?: string;
-}
-
 export interface SystemMessagePayload {
   body: string;
 }
 
+export type RsvpStatus = 'GOING' | 'MAYBE' | 'NOT_GOING';
+
+export interface EventRsvpDto {
+  user: User;
+  status: RsvpStatus;
+  createdAt: string;
+}
+
+/**
+ * Payload carried by EVENT chat messages. Mirrors the server type 1:1.
+ * Contains the full event snapshot + current RSVPs (one row per attendee).
+ */
+export interface EventMessagePayload {
+  eventId: string;
+  title: string;
+  description: string | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  createdById: string;
+  groupId: string | null;
+  rsvps: EventRsvpDto[];
+}
+
 export type MessagePayload =
   | TextMessagePayload
-  | ActivityMessagePayload
+  | EventMessagePayload
   | SystemMessagePayload;
 
 export enum SocketMessageType {
   TEXT = 'text',
   SYSTEM = 'system',
-  ACTIVITY = 'activity',
+  EVENT = 'event',
 }
 
 export interface ChatMessage {
@@ -49,6 +60,15 @@ export interface ChatMessage {
   type: SocketMessageType;
   payload: MessagePayload;
   createdAt: string;
+}
+
+/**
+ * Server-pushed event when an event's RSVPs change. Listeners should replace
+ * the rendered copy of the matching event with this snapshot.
+ */
+export interface EventUpdatedPayload {
+  chatId: string;
+  event: EventMessagePayload;
 }
 
 export interface SocketError {

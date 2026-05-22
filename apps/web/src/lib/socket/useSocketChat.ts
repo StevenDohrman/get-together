@@ -6,12 +6,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_EVENTS, getSocketURL } from './config';
-import { SocketMessageType, type ChatMessage, type SocketError } from './types';
+import {
+  SocketMessageType,
+  type ChatMessage,
+  type EventUpdatedPayload,
+  type SocketError,
+} from './types';
 
 export interface UseSocketChatOptions {
   userId: string | null;
   token: string | null;
   onMessageReceived?: (message: ChatMessage) => void;
+  /**
+   * Fired when an event message's RSVPs change. The payload carries the
+   * full event snapshot so callers can replace any cached copy.
+   */
+  onEventUpdated?: (payload: EventUpdatedPayload) => void;
   onError?: (error: SocketError) => void;
 }
 
@@ -31,7 +41,8 @@ export interface UseSocketChatReturn {
 export function useSocketChat(
   options: UseSocketChatOptions,
 ): UseSocketChatReturn {
-  const { userId, token, onMessageReceived, onError } = options;
+  const { userId, token, onMessageReceived, onEventUpdated, onError } =
+    options;
 
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -41,11 +52,13 @@ export function useSocketChat(
   // Store callbacks in refs so the socket effect never needs to depend on them.
   // This prevents a reconnect loop when the parent passes inline arrow functions.
   const onMessageReceivedRef = useRef(onMessageReceived);
+  const onEventUpdatedRef = useRef(onEventUpdated);
   const onErrorRef = useRef(onError);
   useEffect(() => {
     onMessageReceivedRef.current = onMessageReceived;
+    onEventUpdatedRef.current = onEventUpdated;
     onErrorRef.current = onError;
-  }, [onMessageReceived, onError]);
+  }, [onMessageReceived, onEventUpdated, onError]);
 
   // Initialize socket connection — only re-runs when credentials actually change
   useEffect(() => {
@@ -94,6 +107,14 @@ export function useSocketChat(
       console.debug('[Socket] Message received:', message);
       onMessageReceivedRef.current?.(message);
     });
+
+    socket.on(
+      SOCKET_EVENTS.EVENT_UPDATED,
+      (payload: EventUpdatedPayload) => {
+        console.debug('[Socket] Event updated:', payload);
+        onEventUpdatedRef.current?.(payload);
+      },
+    );
 
     socket.on(SOCKET_EVENTS.ERROR, (data: unknown) => {
       const socketError = (data as SocketError) || {

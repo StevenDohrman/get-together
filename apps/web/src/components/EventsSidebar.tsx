@@ -30,8 +30,16 @@ function visualFor(event: UserEvent) {
 }
 
 function statusPill(event: UserEvent) {
-    if (event.reasons.includes('ATTENDING')) {
+    // The user's personal RSVP is the most actionable signal, so it always
+    // wins over group-based reasons when both are present.
+    if (event.myRsvp === 'GOING') {
         return { label: "You're going", className: 'bg-green-500/20 text-green-300' };
+    }
+    if (event.myRsvp === 'MAYBE') {
+        return { label: 'Maybe', className: 'bg-amber-500/20 text-amber-300' };
+    }
+    if (event.myRsvp === 'NOT_GOING') {
+        return { label: "Can't go", className: 'bg-rose-500/20 text-rose-300' };
     }
     if (event.reasons.includes('HOST_GROUP')) {
         return { label: 'Hosting', className: 'bg-purple-500/20 text-purple-300' };

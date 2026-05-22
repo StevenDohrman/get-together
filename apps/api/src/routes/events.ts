@@ -121,7 +121,13 @@ export function registerEventsRoutes(app: FastifyInstance, deps: EventsRouteDeps
       const reasons: EventDto['reasons'] = [];
       if (ev.groupId && myGroupIdSet.has(ev.groupId)) reasons.push('HOST_GROUP');
       if (ev.subscribedByGroups.length > 0) reasons.push('SUBSCRIBED_GROUP');
-      if (ev.attendees.length > 0) reasons.push('ATTENDING');
+      // Only flag as ATTENDING when the user has actually said yes-or-maybe.
+      // A NOT_GOING attendee row means they explicitly declined; clients
+      // should not show "you're going" for those.
+      const myAttendeeStatus = ev.attendees[0]?.status ?? null;
+      if (myAttendeeStatus === 'GOING' || myAttendeeStatus === 'MAYBE') {
+        reasons.push('ATTENDING');
+      }
       if (ev.groupId === null) reasons.push('PUBLIC');
 
       return {

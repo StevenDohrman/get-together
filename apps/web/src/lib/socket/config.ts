@@ -15,6 +15,8 @@ export const SOCKET_EVENTS = {
   ERROR: 'chat:error',
   USER_JOINED: 'chat:user:joined',
   USER_LEFT: 'chat:user:left',
+  /** An EVENT message's RSVPs changed; payload is the full snapshot. */
+  EVENT_UPDATED: 'chat:event:updated',
 } as const;
 
 /**

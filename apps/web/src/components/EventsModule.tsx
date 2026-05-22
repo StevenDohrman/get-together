@@ -5,18 +5,33 @@ import Loading from './Loading';
 import ErrorMessage from './ErrorMessage';
 import { useUserEvents, type UserEvent } from '@/lib/hooks/useUserEvents';
 
-type PrimaryReason = 'ATTENDING' | 'HOST_GROUP' | 'SUBSCRIBED_GROUP' | 'PUBLIC';
+type BadgeKey =
+    | 'GOING'
+    | 'MAYBE'
+    | 'NOT_GOING'
+    | 'HOST_GROUP'
+    | 'SUBSCRIBED_GROUP'
+    | 'PUBLIC';
 
-function primaryReason(event: UserEvent): PrimaryReason | null {
-    if (event.reasons.includes('ATTENDING')) return 'ATTENDING';
+/**
+ * Choose the most informative single badge for an event. The user's own
+ * RSVP — when they've made one — always wins, since it's the most actionable
+ * signal. Group-based reasons are the fallback.
+ */
+function primaryBadge(event: UserEvent): BadgeKey | null {
+    if (event.myRsvp === 'GOING') return 'GOING';
+    if (event.myRsvp === 'MAYBE') return 'MAYBE';
+    if (event.myRsvp === 'NOT_GOING') return 'NOT_GOING';
     if (event.reasons.includes('HOST_GROUP')) return 'HOST_GROUP';
     if (event.reasons.includes('SUBSCRIBED_GROUP')) return 'SUBSCRIBED_GROUP';
     if (event.reasons.includes('PUBLIC')) return 'PUBLIC';
     return null;
 }
 
-const REASON_BADGE: Record<PrimaryReason, { label: string; className: string }> = {
-    ATTENDING: { label: "You're going", className: 'bg-green-500 text-white' },
+const BADGE_STYLES: Record<BadgeKey, { label: string; className: string }> = {
+    GOING: { label: "You're going", className: 'bg-green-500 text-white' },
+    MAYBE: { label: 'You said maybe', className: 'bg-amber-500 text-white' },
+    NOT_GOING: { label: "You can't go", className: 'bg-rose-500 text-white' },
     HOST_GROUP: { label: 'Your group hosts', className: 'bg-purple-600 text-white' },
     SUBSCRIBED_GROUP: { label: 'Your group signed up', className: 'bg-indigo-600 text-white' },
     PUBLIC: { label: 'UConnect public', className: 'bg-orange-500/90 text-white' },
@@ -58,8 +73,8 @@ function eventVisual(event: UserEvent) {
 function FeaturedEventCard({ event }: { event: UserEvent }) {
     const visual = eventVisual(event);
     const { date, time } = formatDate(event.startsAt);
-    const reason = primaryReason(event);
-    const badge = reason ? REASON_BADGE[reason] : null;
+    const key = primaryBadge(event);
+    const badge = key ? BADGE_STYLES[key] : null;
 
     return (
         <div className="flex flex-col overflow-hidden rounded-2xl bg-slate-800 transition-colors hover:bg-slate-700/80 md:flex-row">
@@ -103,8 +118,8 @@ function FeaturedEventCard({ event }: { event: UserEvent }) {
 function CompactEventCard({ event }: { event: UserEvent }) {
     const visual = eventVisual(event);
     const { date, time } = formatDate(event.startsAt);
-    const reason = primaryReason(event);
-    const badge = reason ? REASON_BADGE[reason] : null;
+    const key = primaryBadge(event);
+    const badge = key ? BADGE_STYLES[key] : null;
 
     return (
         <div className="overflow-hidden rounded-xl bg-slate-800 transition-colors hover:bg-slate-700/80">

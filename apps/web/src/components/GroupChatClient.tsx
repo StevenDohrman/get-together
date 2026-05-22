@@ -1,10 +1,13 @@
 'use client';
 
+import CreateEventDialog from '@/components/chat/CreateEventDialog';
+import EventMessageCard from '@/components/chat/EventMessageCard';
 import { apiGet } from '@/lib/api';
 import {
   SocketMessageType,
   useSocketChat,
   type ChatMessage,
+  type EventMessagePayload,
 } from '@/lib/socket';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import Link from 'next/link';
@@ -25,6 +28,31 @@ type ChatsResponse = { chats: ChatSummary[] };
 
 type MessagesResponse = { messages: ChatMessage[] };
 
+type ProfileResponse = { appUserId: string | null };
+
+/**
+ * Replace the payload of any message in `messages` whose event matches
+ * `next.eventId`. Returns the same array reference when nothing changes.
+ */
+function applyEventUpdate(
+  messages: ChatMessage[],
+  next: EventMessagePayload,
+): ChatMessage[] {
+  let mutated = false;
+  const out = messages.map((m) => {
+    if (
+      m.type !== SocketMessageType.EVENT ||
+      !('eventId' in m.payload) ||
+      m.payload.eventId !== next.eventId
+    ) {
+      return m;
+    }
+    mutated = true;
+    return { ...m, payload: next };
+  });
+  return mutated ? out : messages;
+}
+
 export default function GroupChatClient(props: { groupSlug: string }) {
   const { groupSlug } = props;
 
@@ -36,7 +64,9 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [appUserId, setAppUserId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const joinedChatRef = useRef<string | null>(null);
@@ -44,9 +74,6 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const groupName = chat?.group?.name ?? groupSlug;
 
   // Get current user and token.
-  // `getSupabaseBrowserClient` touches `window.localStorage`, so it must only
-  // run on the client. Calling it during render (e.g. via useMemo) would throw
-  // during Next.js's server prerender pass for this client component.
   useEffect(() => {
     let cancelled = false;
     async function getAuthInfo() {
@@ -72,7 +99,27 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     };
   }, []);
 
-  // Initialize socket connection
+  // RSVPs are keyed by Prisma User.id (not Supabase auth id). Resolve the
+  // app user id so the RSVP buttons can highlight my own current choice.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    async function resolveAppUserId() {
+      try {
+        const profile = await apiGet<ProfileResponse>('/profile');
+        if (cancelled) return;
+        if (profile.appUserId) setAppUserId(profile.appUserId);
+      } catch {
+        // Best-effort. Without it, RSVP highlighting won't work but RSVPing
+        // itself still succeeds because the server keys off the auth token.
+      }
+    }
+    void resolveAppUserId();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
   const {
     connected: socketConnected,
     isConnecting,
@@ -84,11 +131,13 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     userId,
     token,
     onMessageReceived: (message: ChatMessage) => {
-      // Only add if not already in the list (to avoid duplicates)
       setMessages((cur) => {
         const exists = cur.some((m) => m.id === message.id);
         return exists ? cur : [...cur, message];
       });
+    },
+    onEventUpdated: (payload) => {
+      setMessages((cur) => applyEventUpdate(cur, payload.event));
     },
     onError: (err) => {
       setError(err.message);
@@ -119,15 +168,13 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       setLoading(false);
     }
   }, [groupSlug]);
-  // Initial load
 
   useEffect(() => {
     void load();
   }, [load]);
-  // Join chat when chat is loaded and socket is connected
+
   useEffect(() => {
     if (!chat?.id || !socketConnected) {
-      // Clear the joined reference if socket is not connected
       if (!socketConnected && joinedChatRef.current) {
         joinedChatRef.current = null;
       }
@@ -144,11 +191,6 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       });
 
     return () => {
-      // Only attempt to leave if we actually joined this chat. The socket may
-      // have already been torn down (e.g. when the access token refreshes and
-      // the socket effect re-runs); in that case skip the leave RPC because
-      // there's no live socket to send it on anyway — the server cleans up
-      // membership on disconnect.
       if (joinedChatRef.current === chat.id) {
         joinedChatRef.current = null;
         if (socketConnected) {
@@ -163,8 +205,6 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     };
   }, [chat?.id, socketConnected, joinChat, leaveChat]);
 
-  // Auto-scroll to bottom when new messages arrive
-
   useEffect(() => {
     if (!listRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -178,8 +218,6 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const send = useCallback(async () => {
     const body = draft.trim();
     if (!body) {
-      // Surface this instead of silently dropping the click so the user
-      // gets feedback if the button looked enabled but state is stale.
       setError('Type a message before sending');
       return;
     }
@@ -200,9 +238,6 @@ export default function GroupChatClient(props: { groupSlug: string }) {
         body,
       });
       setDraft('');
-      // Optimistically append using the server-confirmed message. The
-      // `MESSAGE_RECEIVED` broadcast handler dedupes by `message.id`, so
-      // this is safe even when the broadcast also arrives.
       setMessages((cur) =>
         cur.some((m) => m.id === message.id) ? cur : [...cur, message],
       );
@@ -212,6 +247,16 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       setSending(false);
     }
   }, [chat, draft, socketConnected, sendSocketMessage]);
+
+  const handleEventCreated = useCallback((message: ChatMessage) => {
+    setMessages((cur) =>
+      cur.some((m) => m.id === message.id) ? cur : [...cur, message],
+    );
+  }, []);
+
+  const handleEventUpdated = useCallback((next: EventMessagePayload) => {
+    setMessages((cur) => applyEventUpdate(cur, next));
+  }, []);
 
   return (
     <DashboardLayout>
@@ -268,6 +313,15 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                 {chat.memberCount} members
               </p>
             </div>
+
+            <button
+              type="button"
+              className="rounded bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-slate-700 disabled:opacity-60"
+              disabled={!chat}
+              onClick={() => setEventDialogOpen(true)}
+            >
+              + Propose event
+            </button>
           </div>
 
           <div ref={listRef} className="flex-1 overflow-auto px-4 py-4">
@@ -276,15 +330,37 @@ export default function GroupChatClient(props: { groupSlug: string }) {
             ) : (
               <div className="space-y-3">
                 {messages.map((m) => {
+                  if (
+                    m.type === SocketMessageType.EVENT &&
+                    'eventId' in m.payload
+                  ) {
+                    return (
+                      <div key={m.id}>
+                        <div className="mb-1 flex items-baseline justify-between gap-3 px-1">
+                          <p className="truncate text-xs text-slate-400">
+                            {m.sender.displayName ??
+                              m.sender.username ??
+                              'Unknown'}
+                          </p>
+                          <p className="shrink-0 text-[11px] text-slate-500">
+                            {new Date(m.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <EventMessageCard
+                          chatId={m.chatId}
+                          event={m.payload}
+                          proposer={m.sender}
+                          currentUserId={appUserId}
+                          onEventUpdated={handleEventUpdated}
+                        />
+                      </div>
+                    );
+                  }
+
                   const senderName =
                     m.sender.displayName ?? m.sender.username ?? 'Unknown';
                   const body =
-                    m.type === SocketMessageType.TEXT && 'body' in m.payload
-                      ? m.payload.body
-                      : m.type === SocketMessageType.SYSTEM &&
-                          'body' in m.payload
-                        ? m.payload.body
-                        : '[Activity message]';
+                    'body' in m.payload ? m.payload.body : '';
 
                   return (
                     <div
@@ -330,6 +406,15 @@ export default function GroupChatClient(props: { groupSlug: string }) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {chat ? (
+        <CreateEventDialog
+          chatId={chat.id}
+          open={eventDialogOpen}
+          onClose={() => setEventDialogOpen(false)}
+          onCreated={handleEventCreated}
+        />
       ) : null}
     </DashboardLayout>
   );

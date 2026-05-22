@@ -5,10 +5,14 @@
 export { getSocketURL, SOCKET_EVENTS } from './config';
 export { SocketMessageType } from './types';
 export type {
-  ActivityMessagePayload,
   ChatMessage,
+  EventMessagePayload,
+  EventRsvpDto,
+  EventUpdatedPayload,
   MessagePayload,
+  RsvpStatus,
   SocketError,
+  SystemMessagePayload,
   TextMessagePayload,
   User,
 } from './types';

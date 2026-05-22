@@ -5,6 +5,7 @@ import { requireAuthenticatedUser } from './auth.js';
 import { getEnv, type Env } from './env.js';
 import { registerActivityRoutes } from './routes/activity.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerChatEventsRoutes } from './routes/chatEvents.js';
 import { registerChatsRoutes } from './routes/chats.js';
 import { registerEventsRoutes } from './routes/events.js';
 import { registerGroupsRoutes } from './routes/groups.js';
@@ -85,6 +86,11 @@ export function buildServer() {
         })
       : null;
 
+  // Initialize Socket.IO before route registration so REST routes that
+  // need to push real-time events (e.g. chat activity creation) can hold
+  // a reference to the service.
+  const { service: chatSocketService } = createSocketServer(app, supabaseAdmin);
+
   registerAuthRoutes(app, { supabaseAdmin });
   registerInterestsRoutes(app, { supabaseAdmin });
   registerProfileRoutes(app, {
@@ -94,11 +100,9 @@ export function buildServer() {
   registerMatchingRoutes(app, { supabaseAdmin });
   registerGroupsRoutes(app, { supabaseAdmin });
   registerChatsRoutes(app, { supabaseAdmin });
+  registerChatEventsRoutes(app, { supabaseAdmin, chatSocketService });
   registerEventsRoutes(app, { supabaseAdmin });
   registerActivityRoutes(app, { supabaseAdmin });
-
-  // Initialize Socket.IO for real-time chat
-  createSocketServer(app, supabaseAdmin);
 
   app.get('/health', async () => {
     return { ok: true };
