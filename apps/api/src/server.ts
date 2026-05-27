@@ -1,21 +1,28 @@
-import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { createClient } from '@supabase/supabase-js';
+import Fastify from 'fastify';
 import { requireAuthenticatedUser } from './auth.js';
 import { getEnv, type Env } from './env.js';
-import { registerInterestsRoutes } from './routes/interests.js';
+import { registerActivityRoutes } from './routes/activity.js';
 import { registerAuthRoutes } from './routes/auth.js';
-import { registerProfileRoutes } from './routes/profile.js';
-import { registerMatchingRoutes } from './routes/matching.js';
-import { registerGroupsRoutes } from './routes/groups.js';
+import { registerChatEventsRoutes } from './routes/chatEvents.js';
 import { registerChatsRoutes } from './routes/chats.js';
 import { registerEventsRoutes } from './routes/events.js';
-import { registerActivityRoutes } from './routes/activity.js';
+import { registerGroupsRoutes } from './routes/groups.js';
+import { registerInterestsRoutes } from './routes/interests.js';
+import { registerMatchingRoutes } from './routes/matching.js';
+import { registerProfileRoutes } from './routes/profile.js';
+import { createSocketServer } from './services/chatSocket.js';
 
 function parseCorsOriginList(raw: string | undefined): Set<string> {
   const trimmed = raw?.trim();
   if (!trimmed) return new Set();
-  return new Set(trimmed.split(',').map(s => s.trim()).filter(Boolean));
+  return new Set(
+    trimmed
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
 }
 
 /** Next.js / Vite etc. on loopback, any port (incl. [::1]) when not using an explicit CORS list. */
@@ -79,12 +86,21 @@ export function buildServer() {
         })
       : null;
 
+  // Initialize Socket.IO before route registration so REST routes that
+  // need to push real-time events (e.g. chat activity creation) can hold
+  // a reference to the service.
+  const { service: chatSocketService } = createSocketServer(app, supabaseAdmin);
+
   registerAuthRoutes(app, { supabaseAdmin });
   registerInterestsRoutes(app, { supabaseAdmin });
-  registerProfileRoutes(app, { supabaseAdmin, supabaseUrl: env.SUPABASE_URL ?? null });
+  registerProfileRoutes(app, {
+    supabaseAdmin,
+    supabaseUrl: env.SUPABASE_URL ?? null,
+  });
   registerMatchingRoutes(app, { supabaseAdmin });
   registerGroupsRoutes(app, { supabaseAdmin });
   registerChatsRoutes(app, { supabaseAdmin });
+  registerChatEventsRoutes(app, { supabaseAdmin, chatSocketService });
   registerEventsRoutes(app, { supabaseAdmin });
   registerActivityRoutes(app, { supabaseAdmin });
 
