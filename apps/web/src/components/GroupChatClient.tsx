@@ -159,7 +159,18 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       const res = await apiGet<MessagesResponse>(
         `/me/chats/${found.id}/messages?limit=50`,
       );
-      setMessages(res.messages ?? []);
+      setMessages((cur) => {
+        const fetchedMessages = res.messages ?? [];
+        const merged = [...fetchedMessages];
+
+        for (const message of cur) {
+          if (!merged.some((existing) => existing.id === message.id)) {
+            merged.push(message);
+          }
+        }
+
+        return merged;
+      });
     } catch (e) {
       setChat(null);
       setMessages([]);

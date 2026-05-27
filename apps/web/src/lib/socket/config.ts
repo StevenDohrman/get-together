@@ -27,7 +27,7 @@ export function getSocketURL(): string {
     return '';
   }
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
   const host = window.location.host;
 
   // In development, connect to localhost API on port 4000

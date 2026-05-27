@@ -233,11 +233,28 @@ export class ChatSocketService {
         this.userChatSubscriptions.get(userId)!.add(chatId);
       }
 
-      const dbKind = messageType === SocketMessageType.SYSTEM ? 'SYSTEM' : 'TEXT';
-      const body =
-        messageType === SocketMessageType.TEXT
-          ? (payload as TextMessagePayload).body
-          : '';
+      let dbKind: 'SYSTEM' | 'TEXT';
+      let body = '';
+
+      if (messageType === SocketMessageType.TEXT) {
+        if (
+          typeof payload !== 'object' ||
+          payload === null ||
+          typeof (payload as TextMessagePayload).body !== 'string' ||
+          (payload as TextMessagePayload).body.trim().length === 0
+        ) {
+          callback?.(ackError('Invalid TEXT message payload'));
+          return;
+        }
+
+        dbKind = 'TEXT';
+        body = (payload as TextMessagePayload).body.trim();
+      } else if (messageType === SocketMessageType.SYSTEM) {
+        dbKind = 'SYSTEM';
+      } else {
+        callback?.(ackError('Unsupported message type'));
+        return;
+      }
 
       const message = await prisma.groupChatMessage.create({
         data: {
@@ -359,10 +376,16 @@ export function createSocketServer(
           'http://127.0.0.1:3000',
           'http://127.0.0.1:3001',
         ];
+  const socketCorsOrigin =
+    corsOrigins.length === 0
+      ? process.env.NODE_ENV === 'production'
+        ? false
+        : true
+      : corsOrigins;
 
   const io = new SocketIOServerConstructor(fastifyInstance.server, {
     cors: {
-      origin: corsOrigins.length === 0 ? true : corsOrigins,
+      origin: socketCorsOrigin,
       methods: ['GET', 'POST'],
       credentials: true,
     },
