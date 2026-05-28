@@ -11,8 +11,8 @@ import {
   type ChatMessage,
   type EventMessagePayload,
   type EventRsvpDto,
-  SocketMessageType,
-} from '../types/socket.js';
+  ChatMessageType,
+} from '../types/chat.js';
 
 /**
  * Shape returned from Prisma when we fetch an event together with the
@@ -54,7 +54,8 @@ export interface CreateChatEventInput {
 
 /**
  * Result of creating a new event proposal: the announce message + the
- * event payload, in the same shape callers will broadcast over Socket.IO.
+ * event payload, in the same shape callers will broadcast on the chat's
+ * realtime channel.
  */
 export interface CreatedChatEvent {
   event: EventWithAttendees;
@@ -108,7 +109,7 @@ export function toChatMessage(
       username: message.sender.username,
       displayName: message.sender.displayName,
     },
-    type: SocketMessageType.EVENT,
+    type: ChatMessageType.EVENT,
     payload: toEventPayload(event),
     createdAt: message.createdAt.toISOString(),
   };

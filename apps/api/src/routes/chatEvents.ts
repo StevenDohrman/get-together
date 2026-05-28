@@ -11,16 +11,16 @@ import {
   toChatMessage,
   toEventPayload,
 } from '../services/chatEvents.js';
-import type { ChatSocketService } from '../services/chatSocket.js';
 import { isChatMember } from '../services/groupChat.js';
+import type { ChatBroadcaster } from '../services/realtimeBroadcast.js';
 
 export type ChatEventsRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
   /**
-   * Optional Socket.IO service. When present, mutations broadcast to all
-   * connected chat members. REST still works without it (e.g. in tests).
+   * Optional Realtime broadcaster. When present, event mutations are pushed
+   * to subscribed chat members. REST still works without it (e.g. in tests).
    */
-  chatSocketService?: ChatSocketService | null;
+  broadcaster?: ChatBroadcaster | null;
 };
 
 const chatIdParam = z.object({ chatId: z.string().uuid() });
@@ -91,14 +91,14 @@ export function registerChatEventsRoutes(
   app: FastifyInstance,
   deps: ChatEventsRouteDeps,
 ) {
-  const { supabaseAdmin, chatSocketService } = deps;
+  const { supabaseAdmin, broadcaster } = deps;
 
   /**
    * Propose a new event in a chat the user is a member of. The event is
    * created as a row in `Event` (hosted by the chat's group when there is
    * one), the announcing chat message is created and linked to it, and the
-   * full payload is broadcast over Socket.IO so other members see it
-   * immediately.
+   * full payload is broadcast on the realtime channel so other members see
+   * it immediately.
    */
   app.post('/me/chats/:chatId/events', async (req, reply) => {
     const row = await requireAppUser(req, reply, supabaseAdmin);
@@ -142,7 +142,7 @@ export function registerChatEventsRoutes(
       endsAt: body.data.endsAt ? new Date(body.data.endsAt) : null,
     });
 
-    chatSocketService?.broadcastMessage(chat.id, created.chatMessage);
+    void broadcaster?.broadcastMessage(chat.id, created.chatMessage);
 
     return reply.status(201).send({ message: created.chatMessage });
   });
@@ -197,7 +197,7 @@ export function registerChatEventsRoutes(
       }
 
       const payload = toEventPayload(event);
-      chatSocketService?.broadcastEventUpdated(params.data.chatId, payload);
+      void broadcaster?.broadcastEventUpdated(params.data.chatId, payload);
 
       return reply.send({ event: payload });
     },
@@ -242,7 +242,7 @@ export function registerChatEventsRoutes(
       }
 
       const payload = toEventPayload(event);
-      chatSocketService?.broadcastEventUpdated(params.data.chatId, payload);
+      void broadcaster?.broadcastEventUpdated(params.data.chatId, payload);
 
       return reply.send({ event: payload });
     },
@@ -250,7 +250,7 @@ export function registerChatEventsRoutes(
 
   /**
    * Fetch a single event (with full RSVP roster). Useful when the FE comes
-   * in via deep link before subscribing to the socket.
+   * in via deep link before subscribing to the realtime channel.
    */
   app.get(
     '/me/chats/:chatId/events/:eventId',

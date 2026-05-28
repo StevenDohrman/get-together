@@ -4,11 +4,11 @@ import CreateEventDialog from '@/components/chat/CreateEventDialog';
 import EventMessageCard from '@/components/chat/EventMessageCard';
 import { apiGet } from '@/lib/api';
 import {
-  SocketMessageType,
-  useSocketChat,
+  ChatMessageType,
+  useChatRealtime,
   type ChatMessage,
   type EventMessagePayload,
-} from '@/lib/socket';
+} from '@/lib/chat';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -41,7 +41,7 @@ function applyEventUpdate(
   let mutated = false;
   const out = messages.map((m) => {
     if (
-      m.type !== SocketMessageType.EVENT ||
+      m.type !== ChatMessageType.EVENT ||
       !('eventId' in m.payload) ||
       m.payload.eventId !== next.eventId
     ) {
@@ -51,6 +51,24 @@ function applyEventUpdate(
     return { ...m, payload: next };
   });
   return mutated ? out : messages;
+}
+
+/**
+ * Combine `fetched` (from REST) with `current` (which may include realtime
+ * messages that arrived mid-fetch or while disconnected) into a single
+ * deduped, chronological list. Used by both the initial load and the
+ * post-reconnect backfill so neither path clobbers the other.
+ */
+function mergeMessages(
+  current: ChatMessage[],
+  fetched: ChatMessage[],
+): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>();
+  for (const m of fetched) byId.set(m.id, m);
+  for (const m of current) if (!byId.has(m.id)) byId.set(m.id, m);
+  return [...byId.values()].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
 }
 
 export default function GroupChatClient(props: { groupSlug: string }) {
@@ -63,17 +81,16 @@ export default function GroupChatClient(props: { groupSlug: string }) {
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
   const [appUserId, setAppUserId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const joinedChatRef = useRef<string | null>(null);
 
   const groupName = chat?.group?.name ?? groupSlug;
 
-  // Get current user and token.
+  // Get the current session's access token. The realtime hook needs it to
+  // authenticate the broadcast subscription against the channel-auth RLS.
   useEffect(() => {
     let cancelled = false;
     async function getAuthInfo() {
@@ -89,7 +106,6 @@ export default function GroupChatClient(props: { groupSlug: string }) {
         return;
       }
 
-      setUserId(session.user.id);
       setToken(session.access_token);
     }
 
@@ -120,17 +136,27 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     };
   }, [token]);
 
+  // Backfill recent messages from REST. Used both on initial load and after
+  // a realtime reconnect (broadcasts dropped during the gap aren't replayed).
+  // Always merges into current state so messages that arrived mid-fetch via
+  // the realtime channel aren't clobbered.
+  const backfill = useCallback(async (chatId: string): Promise<void> => {
+    const res = await apiGet<MessagesResponse>(
+      `/me/chats/${chatId}/messages?limit=50`,
+    );
+    const fresh = res.messages ?? [];
+    setMessages((cur) => mergeMessages(cur, fresh));
+  }, []);
+
   const {
-    connected: socketConnected,
+    connected: realtimeConnected,
     isConnecting,
-    joinChat,
-    leaveChat,
-    sendMessage: sendSocketMessage,
-    error: socketError,
-  } = useSocketChat({
-    userId,
+    sendMessage: sendChatMessage,
+    error: realtimeError,
+  } = useChatRealtime({
+    chatId: chat?.id ?? null,
     token,
-    onMessageReceived: (message: ChatMessage) => {
+    onMessageReceived: (message) => {
       setMessages((cur) => {
         const exists = cur.some((m) => m.id === message.id);
         return exists ? cur : [...cur, message];
@@ -138,6 +164,11 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     },
     onEventUpdated: (payload) => {
       setMessages((cur) => applyEventUpdate(cur, payload.event));
+    },
+    onResubscribed: (chatId) => {
+      void backfill(chatId).catch((err) => {
+        console.error('Failed to backfill after reconnect:', err);
+      });
     },
     onError: (err) => {
       setError(err.message);
@@ -156,21 +187,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       }
       setChat(found);
 
-      const res = await apiGet<MessagesResponse>(
-        `/me/chats/${found.id}/messages?limit=50`,
-      );
-      setMessages((cur) => {
-        const fetchedMessages = res.messages ?? [];
-        const merged = [...fetchedMessages];
-
-        for (const message of cur) {
-          if (!merged.some((existing) => existing.id === message.id)) {
-            merged.push(message);
-          }
-        }
-
-        return merged;
-      });
+      await backfill(found.id);
     } catch (e) {
       setChat(null);
       setMessages([]);
@@ -178,43 +195,11 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     } finally {
       setLoading(false);
     }
-  }, [groupSlug]);
+  }, [groupSlug, backfill]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (!chat?.id || !socketConnected) {
-      if (!socketConnected && joinedChatRef.current) {
-        joinedChatRef.current = null;
-      }
-      return;
-    }
-
-    void joinChat(chat.id)
-      .then(() => {
-        joinedChatRef.current = chat.id;
-      })
-      .catch((err) => {
-        console.error('Failed to join chat:', err);
-        setError(err instanceof Error ? err.message : 'Failed to join chat');
-      });
-
-    return () => {
-      if (joinedChatRef.current === chat.id) {
-        joinedChatRef.current = null;
-        if (socketConnected) {
-          void leaveChat(chat.id).catch((err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg !== 'Socket not connected') {
-              console.error('Failed to leave chat:', err);
-            }
-          });
-        }
-      }
-    };
-  }, [chat?.id, socketConnected, joinChat, leaveChat]);
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -222,8 +207,8 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   }, [messages.length]);
 
   const canSend = useMemo(
-    () => draft.trim().length > 0 && !sending && !!chat && socketConnected,
-    [draft, sending, chat, socketConnected],
+    () => draft.trim().length > 0 && !sending && !!chat && realtimeConnected,
+    [draft, sending, chat, realtimeConnected],
   );
 
   const send = useCallback(async () => {
@@ -236,16 +221,12 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       setError('Chat is not loaded yet');
       return;
     }
-    if (!socketConnected) {
-      setError('Not connected to chat server');
-      return;
-    }
 
     setSending(true);
     setError(null);
 
     try {
-      const message = await sendSocketMessage(chat.id, SocketMessageType.TEXT, {
+      const message = await sendChatMessage(chat.id, ChatMessageType.TEXT, {
         body,
       });
       setDraft('');
@@ -257,7 +238,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     } finally {
       setSending(false);
     }
-  }, [chat, draft, socketConnected, sendSocketMessage]);
+  }, [chat, draft, sendChatMessage]);
 
   const handleEventCreated = useCallback((message: ChatMessage) => {
     setMessages((cur) =>
@@ -286,10 +267,10 @@ export default function GroupChatClient(props: { groupSlug: string }) {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded bg-slate-800 px-3 py-2">
             <div
-              className={`h-2 w-2 rounded-full ${socketConnected ? 'bg-green-500' : isConnecting ? 'bg-yellow-500' : 'bg-red-500'}`}
+              className={`h-2 w-2 rounded-full ${realtimeConnected ? 'bg-green-500' : isConnecting ? 'bg-yellow-500' : 'bg-red-500'}`}
             />
             <span className="text-xs text-slate-300">
-              {socketConnected
+              {realtimeConnected
                 ? 'Connected'
                 : isConnecting
                   ? 'Connecting…'
@@ -309,8 +290,8 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       </div>
 
       {loading ? <Loading /> : null}
-      {error || socketError ? (
-        <ErrorMessage message={error || socketError?.message || ''} />
+      {error || realtimeError ? (
+        <ErrorMessage message={error || realtimeError?.message || ''} />
       ) : null}
 
       {!loading && chat ? (
@@ -342,7 +323,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
               <div className="space-y-3">
                 {messages.map((m) => {
                   if (
-                    m.type === SocketMessageType.EVENT &&
+                    m.type === ChatMessageType.EVENT &&
                     'eventId' in m.payload
                   ) {
                     return (
@@ -403,7 +384,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                 placeholder="Write a message…"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                disabled={sending || !socketConnected}
+                disabled={sending || !realtimeConnected}
                 rows={2}
               />
               <button
