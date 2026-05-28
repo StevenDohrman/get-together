@@ -141,6 +141,7 @@ export function useChatRealtime(
       if (status === 'SUBSCRIBED') {
         setConnected(true);
         setIsConnecting(false);
+        setError(null);
         if (hasSubscribedOnce) {
           // Reconnect: ask the caller to backfill anything we missed.
           onResubscribedRef.current?.(chatId);

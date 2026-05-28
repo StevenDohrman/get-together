@@ -90,7 +90,7 @@ FOR SELECT
 TO authenticated
 USING (
   realtime.messages.extension = 'broadcast'
-  AND realtime.topic() LIKE 'chat:%'
+  AND realtime.topic() ~ '^chat:[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{4}-[0-9a-fA-F-]{12}$'
   AND public.is_chat_member_for_auth(
     (substring(realtime.topic() FROM 6))::uuid,
     (SELECT auth.uid())
