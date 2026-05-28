@@ -1,6 +1,7 @@
 /**
- * Extensible chat message type system supporting both current and future message types.
- * Designed to support polymorphic message handling.
+ * Wire types for the group-chat realtime channel. These are the payloads
+ * persisted on disk (as JSON) and broadcast to clients over Supabase
+ * Realtime (private topic `chat:<chatId>`).
  */
 
 import type { RSVPStatus } from '@prisma/client';
@@ -31,7 +32,7 @@ export interface EventRsvpDto {
  * Event message payload — denormalized snapshot of an `Event` plus the
  * current RSVPs, sent to clients alongside the chat message that announced
  * it. Mutations to the underlying event (e.g. someone RSVPing) arrive as
- * separate `chat:event:updated` events; the canonical store is the DB.
+ * separate `chat:event:updated` broadcasts; the canonical store is the DB.
  */
 export interface EventMessagePayload {
   eventId: string;
@@ -48,7 +49,7 @@ export interface EventMessagePayload {
 }
 
 /** Unified enum for polymorphic message handling */
-export enum SocketMessageType {
+export enum ChatMessageType {
   TEXT = 'text',
   SYSTEM = 'system',
   EVENT = 'event',
@@ -69,68 +70,36 @@ export interface ChatMessage {
     username: string | null;
     displayName: string | null;
   };
-  type: SocketMessageType;
+  type: ChatMessageType;
   payload: MessagePayload;
   createdAt: string;
 }
 
 /**
  * Broadcast when an event's mutable state changes (currently: an RSVP was
- * set or cleared). The `payload` is the full updated snapshot so clients
- * can replace what they have without further requests.
+ * set or cleared). The `event` is the full updated snapshot so clients can
+ * replace what they have without further requests.
  */
 export interface EventUpdatedPayload {
   chatId: string;
   event: EventMessagePayload;
 }
 
-/** Server-to-client socket event: new message received */
-export interface MessageReceivedEvent {
-  type: 'message:received';
-  data: ChatMessage;
-}
-
-/** Client-to-server socket event: send new message */
-export interface SendMessageEvent {
-  type: 'message:send';
-  data: {
-    chatId: string;
-    messageType: SocketMessageType;
-    payload: MessagePayload;
-  };
-}
-
-/** Server-to-client socket event: message sent successfully */
-export interface MessageSentEvent {
-  type: 'message:sent';
-  data: ChatMessage;
-}
-
-/** Server-to-client socket event: error occurred */
-export interface ErrorEvent {
-  type: 'error';
-  data: {
-    code: string;
-    message: string;
-  };
-}
-
-/** Union of all socket events */
-export type SocketEvent = MessageReceivedEvent | MessageSentEvent | ErrorEvent;
-
-/** Socket namespace events */
-export const SOCKET_EVENTS = {
-  // Client to server
-  JOIN_CHAT: 'chat:join',
-  LEAVE_CHAT: 'chat:leave',
-  SEND_MESSAGE: 'chat:message:send',
-
-  // Server to client
+/**
+ * Realtime broadcast event names sent on the `chat:<chatId>` topic. Clients
+ * subscribe to these via `channel.on('broadcast', { event: ... }, …)`.
+ */
+export const CHAT_BROADCAST_EVENTS = {
+  /** A new chat message was created (text, system, or event-announce). */
   MESSAGE_RECEIVED: 'chat:message:received',
-  MESSAGE_SENT: 'chat:message:sent',
-  ERROR: 'chat:error',
-  USER_JOINED: 'chat:user:joined',
-  USER_LEFT: 'chat:user:left',
   /** An EVENT message's mutable state (RSVPs) changed. */
   EVENT_UPDATED: 'chat:event:updated',
 } as const;
+
+export type ChatBroadcastEvent =
+  (typeof CHAT_BROADCAST_EVENTS)[keyof typeof CHAT_BROADCAST_EVENTS];
+
+/** Realtime topic for a given chat. Mirrors the RLS policy in the migration. */
+export function chatBroadcastTopic(chatId: string): string {
+  return `chat:${chatId}`;
+}

@@ -12,7 +12,7 @@ import { registerGroupsRoutes } from './routes/groups.js';
 import { registerInterestsRoutes } from './routes/interests.js';
 import { registerMatchingRoutes } from './routes/matching.js';
 import { registerProfileRoutes } from './routes/profile.js';
-import { createSocketServer } from './services/chatSocket.js';
+import { createChatBroadcaster } from './services/realtimeBroadcast.js';
 
 function parseCorsOriginList(raw: string | undefined): Set<string> {
   const trimmed = raw?.trim();
@@ -86,10 +86,17 @@ export function buildServer() {
         })
       : null;
 
-  // Initialize Socket.IO before route registration so REST routes that
-  // need to push real-time events (e.g. chat activity creation) can hold
-  // a reference to the service.
-  const { service: chatSocketService } = createSocketServer(app, supabaseAdmin);
+  // Chat realtime broadcaster: publishes to Supabase Realtime over the
+  // service-role REST endpoint. Null when SUPABASE_URL/SERVICE_ROLE_KEY
+  // aren't configured (tests, local-only setups). Callers tolerate this.
+  const broadcaster =
+    env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+      ? createChatBroadcaster({
+          supabaseUrl: env.SUPABASE_URL,
+          serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+          onError: (data, msg) => app.log.error(data, msg),
+        })
+      : null;
 
   registerAuthRoutes(app, { supabaseAdmin });
   registerInterestsRoutes(app, { supabaseAdmin });
@@ -99,8 +106,8 @@ export function buildServer() {
   });
   registerMatchingRoutes(app, { supabaseAdmin });
   registerGroupsRoutes(app, { supabaseAdmin });
-  registerChatsRoutes(app, { supabaseAdmin });
-  registerChatEventsRoutes(app, { supabaseAdmin, chatSocketService });
+  registerChatsRoutes(app, { supabaseAdmin, broadcaster });
+  registerChatEventsRoutes(app, { supabaseAdmin, broadcaster });
   registerEventsRoutes(app, { supabaseAdmin });
   registerActivityRoutes(app, { supabaseAdmin });
 

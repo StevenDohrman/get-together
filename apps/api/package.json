@@ -16,12 +16,10 @@
   "dependencies": {
     "@uconnect/db": "workspace:*",
     "@fastify/cors": "^11.1.0",
-    "@socket.io/component-emitter": "^3.1.2",
     "@supabase/supabase-js": "^2.57.4",
     "dotenv": "^16.6.1",
     "fastify": "^5.6.0",
     "pino": "^9.9.0",
-    "socket.io": "^4.8.1",
     "zod": "^4.1.5"
   },
   "devDependencies": {

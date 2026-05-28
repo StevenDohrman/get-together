@@ -1,6 +1,6 @@
 /**
- * Client-side type definitions for socket communication.
- * Mirrors server types but optimized for React usage.
+ * Client-side wire types for the realtime chat channel. Mirror the server
+ * types one-for-one (see `apps/api/src/types/chat.ts`).
  */
 
 export interface User {
@@ -47,7 +47,7 @@ export type MessagePayload =
   | EventMessagePayload
   | SystemMessagePayload;
 
-export enum SocketMessageType {
+export enum ChatMessageType {
   TEXT = 'text',
   SYSTEM = 'system',
   EVENT = 'event',
@@ -57,21 +57,34 @@ export interface ChatMessage {
   id: string;
   chatId: string;
   sender: User;
-  type: SocketMessageType;
+  type: ChatMessageType;
   payload: MessagePayload;
   createdAt: string;
 }
 
 /**
- * Server-pushed event when an event's RSVPs change. Listeners should replace
- * the rendered copy of the matching event with this snapshot.
+ * Server-pushed event when an event's RSVPs change. Listeners should
+ * replace the rendered copy of the matching event with this snapshot.
  */
 export interface EventUpdatedPayload {
   chatId: string;
   event: EventMessagePayload;
 }
 
-export interface SocketError {
+export interface ChatError {
   code: string;
   message: string;
+}
+
+/**
+ * Realtime broadcast event names sent on the `chat:<chatId>` topic.
+ * Must stay in sync with `apps/api/src/types/chat.ts`.
+ */
+export const CHAT_BROADCAST_EVENTS = {
+  MESSAGE_RECEIVED: 'chat:message:received',
+  EVENT_UPDATED: 'chat:event:updated',
+} as const;
+
+export function chatBroadcastTopic(chatId: string): string {
+  return `chat:${chatId}`;
 }

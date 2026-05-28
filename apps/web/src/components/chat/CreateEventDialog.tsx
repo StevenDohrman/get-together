@@ -1,7 +1,7 @@
 'use client';
 
 import { apiJson } from '@/lib/api';
-import type { ChatMessage } from '@/lib/socket';
+import type { ChatMessage } from '@/lib/chat';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export type CreateEventDialogProps = {

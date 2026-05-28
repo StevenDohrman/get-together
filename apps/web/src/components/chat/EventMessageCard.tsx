@@ -5,7 +5,7 @@ import type {
   EventMessagePayload,
   RsvpStatus,
   User,
-} from '@/lib/socket';
+} from '@/lib/chat';
 import { useCallback, useMemo, useState } from 'react';
 
 export type EventMessageCardProps = {

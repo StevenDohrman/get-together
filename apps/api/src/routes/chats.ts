@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -5,27 +6,58 @@ import { prismaClient as prisma } from '../db.js';
 import { requireAppUser } from '../requireAppUser.js';
 import { toEventPayload } from '../services/chatEvents.js';
 import { isChatMember } from '../services/groupChat.js';
+import type { ChatBroadcaster } from '../services/realtimeBroadcast.js';
 import {
-  SocketMessageType,
+  ChatMessageType,
   type ChatMessage,
   type TextMessagePayload,
-} from '../types/socket.js';
+} from '../types/chat.js';
 
 export type ChatsRouteDeps = {
   supabaseAdmin: SupabaseClient | null;
+  /**
+   * Optional broadcaster. When present, persisted messages are pushed to
+   * subscribed chat members via Supabase Realtime. Tests may omit it.
+   */
+  broadcaster?: ChatBroadcaster | null;
 };
 
 const limitQuery = z.coerce.number().int().min(1).max(100).default(50);
 
-const sendMessageBody = z.object({
+const textPayload = z.object({
   body: z.string().trim().min(1).max(2000),
 });
+
+const systemPayload = z.object({
+  body: z.string().trim().min(1).max(2000),
+});
+
+/**
+ * Two accepted shapes:
+ *  1. `{ messageType, payload }` — preferred; matches the wire `ChatMessage`
+ *     shape used by the realtime hook. EVENT messages are not accepted here;
+ *     they're created via `POST /me/chats/:chatId/events`.
+ *  2. `{ body }` — legacy shortcut equivalent to TEXT with `payload.body`.
+ */
+const sendMessageBody = z.union([
+  z.object({
+    messageType: z.literal(ChatMessageType.TEXT),
+    payload: textPayload,
+  }),
+  z.object({
+    messageType: z.literal(ChatMessageType.SYSTEM),
+    payload: systemPayload,
+  }),
+  z.object({
+    body: z.string().trim().min(1).max(2000),
+  }),
+]);
 
 export function registerChatsRoutes(
   app: FastifyInstance,
   deps: ChatsRouteDeps,
 ) {
-  const { supabaseAdmin } = deps;
+  const { supabaseAdmin, broadcaster } = deps;
 
   app.get('/me/chats', async (req, reply) => {
     const row = await requireAppUser(req, reply, supabaseAdmin);
@@ -110,7 +142,7 @@ export function registerChatsRoutes(
           id: m.id,
           chatId: m.chatId,
           sender: m.sender,
-          type: SocketMessageType.EVENT,
+          type: ChatMessageType.EVENT,
           payload: toEventPayload(m.event),
           createdAt: m.createdAt.toISOString(),
         };
@@ -125,7 +157,7 @@ export function registerChatsRoutes(
           id: m.id,
           chatId: m.chatId,
           sender: m.sender,
-          type: SocketMessageType.SYSTEM,
+          type: ChatMessageType.SYSTEM,
           payload: payload as { body: string },
           createdAt: m.createdAt.toISOString(),
         };
@@ -133,7 +165,7 @@ export function registerChatsRoutes(
 
       // TEXT (default). Prefer stored payload (which clients set), but fall
       // back to the bare `body` field for messages persisted via REST.
-      const textPayload: TextMessagePayload =
+      const textBody: TextMessagePayload =
         m.payload && typeof m.payload === 'object' && 'body' in m.payload
           ? (m.payload as unknown as TextMessagePayload)
           : { body: m.body };
@@ -142,8 +174,8 @@ export function registerChatsRoutes(
         id: m.id,
         chatId: m.chatId,
         sender: m.sender,
-        type: SocketMessageType.TEXT,
-        payload: textPayload,
+        type: ChatMessageType.TEXT,
+        payload: textBody,
         createdAt: m.createdAt.toISOString(),
       };
     });
@@ -174,26 +206,43 @@ export function registerChatsRoutes(
       });
     }
 
+    // Normalize both accepted shapes into a single internal form.
+    const { messageType, payload } =
+      'messageType' in parsed.data
+        ? parsed.data
+        : {
+            messageType: ChatMessageType.TEXT,
+            payload: { body: parsed.data.body } satisfies TextMessagePayload,
+          };
+
+    const dbKind = messageType === ChatMessageType.SYSTEM ? 'SYSTEM' : 'TEXT';
+
     const created = await prisma.groupChatMessage.create({
       data: {
         chatId: chatId.data,
         senderId: row.id,
-        body: parsed.data.body,
+        kind: dbKind,
+        body: payload.body,
+        payload: payload as unknown as Prisma.InputJsonValue,
       },
       include: {
         sender: { select: { id: true, username: true, displayName: true } },
       },
     });
 
-    return reply.status(201).send({
-      message: {
-        id: created.id,
-        chatId: created.chatId,
-        sender: created.sender,
-        type: SocketMessageType.TEXT,
-        payload: { body: created.body } as TextMessagePayload,
-        createdAt: created.createdAt.toISOString(),
-      },
-    });
+    const wireMessage: ChatMessage = {
+      id: created.id,
+      chatId: created.chatId,
+      sender: created.sender,
+      type: messageType,
+      payload,
+      createdAt: created.createdAt.toISOString(),
+    };
+
+    // Fire-and-forget — a missed broadcast degrades UX (other clients won't
+    // see the new message until they refetch) but never fails the write.
+    void broadcaster?.broadcastMessage(chatId.data, wireMessage);
+
+    return reply.status(201).send({ message: wireMessage });
   });
 }
