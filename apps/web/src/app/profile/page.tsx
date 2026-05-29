@@ -1,8 +1,7 @@
 'use client';
 
-import { apiJson } from '@/lib/api';
-import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useInterests } from '@/lib/hooks/useInterests';
 import { usePhotos, MAX_PHOTOS } from '@/lib/hooks/usePhotos';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -11,18 +10,6 @@ import {
   MAX_PHOTO_BYTES,
   uploadUserPhoto,
 } from '@/lib/uploadUserPhoto';
-
-type ProfilePayload = {
-  supabaseUserId: string;
-  email: string | null;
-  appUserId: string | null;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  savedLocation: string | null;
-};
-
-const MAX_BIO_LENGTH = 500;
 
 type Interest = {
   id: string;
@@ -34,56 +21,6 @@ type Interest = {
 type SelectedInterest = Interest & {
   weight: number;
 };
-
-type InterestsResponse = {
-  interests: Interest[];
-};
-
-type SelectedInterestsResponse = {
-  interests: SelectedInterest[];
-};
-
-const MIN_WEIGHT = 0;
-const MAX_WEIGHT = 10;
-const DEFAULT_WEIGHT = 5;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function optString(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string') return null;
-  return value;
-}
-
-function parseProfile(payload: unknown): ProfilePayload | null {
-  if (!isRecord(payload)) return null;
-  const supabaseUserId = payload.supabaseUserId;
-  if (typeof supabaseUserId !== 'string') return null;
-  return {
-    supabaseUserId,
-    email: typeof payload.email === 'string' ? payload.email : null,
-    appUserId: typeof payload.appUserId === 'string' ? payload.appUserId : null,
-    username: optString(payload.username),
-    displayName: optString(payload.displayName),
-    bio: optString(payload.bio),
-    savedLocation: optString(payload.savedLocation),
-  };
-}
-
-function clampWeight(value: number): number {
-  return Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, value));
-}
-
-function sortSelectedInterests(
-  interests: SelectedInterest[],
-): SelectedInterest[] {
-  return [...interests].sort((left, right) => {
-    if (right.weight !== left.weight) return right.weight - left.weight;
-    return left.name.localeCompare(right.name);
-  });
-}
 
 function InterestCard(props: {
   interest: Interest;
@@ -117,13 +54,6 @@ function InterestCard(props: {
 }
 
 export default function ProfilePage() {
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<ProfilePayload | null>(null);
-  const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [bio, setBio] = useState('');
-  const [locationName, setLocationName] = useState('');
-  const [saving, setSaving] = useState(false);
   const {
     photos,
     loading: photosLoading,
@@ -149,25 +79,10 @@ export default function ProfilePage() {
     add: addInterest,
     remove: removeInterest,
     updateWeight: updateInterestWeight,
-    refetch: refetchInterests,
   } = useInterests();
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
-  const getSupabase = useCallback(() => {
-    if (!supabaseRef.current) {
-      supabaseRef.current = getSupabaseBrowserClient();
-    }
-    return supabaseRef.current;
-  }, []);
   const deferredSearchTerm = useDeferredValue(searchTerm);
-
-  const signedInAs = profile?.email ?? profile?.supabaseUserId ?? '';
 
   const selectedById = useMemo(() => {
     return new Map(
@@ -204,198 +119,6 @@ export default function ProfilePage() {
     };
   }, [draggingId, stopDragging]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setError(null);
-      setInfo(null);
-
-      try {
-        const { data: sessionData, error: sessionError } =
-          await getSupabase().auth.getSession();
-        if (sessionError) throw new Error(sessionError.message);
-        if (!sessionData.session) {
-          if (!cancelled) {
-            setProfile(null);
-            setLoading(false);
-          }
-          return;
-        }
-
-        const accessToken = sessionData.session.access_token;
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-        const res = await fetch(`${apiUrl}/profile`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-
-        const body: unknown = await res.json();
-
-        if (!res.ok) {
-          const msg =
-            typeof body === 'object' && body !== null && 'error' in body
-              ? String((body as Record<string, unknown>).error)
-              : 'Failed to load profile';
-          throw new Error(msg);
-        }
-
-        const parsed = parseProfile(body);
-        if (!parsed) throw new Error('Unexpected profile response');
-
-        if (cancelled) return;
-
-        setProfile(parsed);
-        setUsername(parsed.username ?? '');
-        setDisplayName(parsed.displayName ?? '');
-        setBio(parsed.bio ?? '');
-        setLocationName(parsed.savedLocation ?? '');
-        setLoading(false);
-        // Trigger interests hook to (re)fetch using current auth token
-        void refetchInterests();
-      } catch (e) {
-        if (!cancelled) {
-          setProfile(null);
-          setError(e instanceof Error ? e.message : 'Failed to load profile');
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [getSupabase]);
-
-  async function saveProfile(nextGeoLocation?: GeolocationCoordinates | null) {
-    setError(null);
-    setInfo(null);
-
-    const nextUsername = username.trim();
-    const nextDisplay = displayName.trim();
-
-    if (
-      nextUsername.length > 0 &&
-      (nextUsername.length < 3 ||
-        nextUsername.length > 30 ||
-        !/^[a-zA-Z0-9_]+$/.test(nextUsername))
-    ) {
-      setError(
-        'Username must be 3–30 chars and use letters, numbers, or underscore.',
-      );
-      return;
-    }
-
-    if (nextDisplay.length > 80) {
-      setError('Display name must be at most 80 characters.');
-      return;
-    }
-
-    const nextBio = bio.trim();
-    if (nextBio.length > MAX_BIO_LENGTH) {
-      setError(`Bio must be at most ${MAX_BIO_LENGTH} characters.`);
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const { data: sessionData } = await getSupabase().auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error('Not signed in');
-
-      const payload: {
-        username: string | null;
-        displayName: string | null;
-        bio: string | null;
-        geoLocation?: GeolocationCoordinates | null;
-      } = {
-        username: nextUsername.length === 0 ? null : nextUsername,
-        displayName: nextDisplay.length === 0 ? null : nextDisplay,
-        bio: nextBio.length === 0 ? null : nextBio,
-      };
-
-      if (nextGeoLocation !== undefined) {
-        payload.geoLocation = nextGeoLocation;
-      }
-
-      const updated = parseProfile(
-        await apiJson<unknown>('/profile', 'PATCH', payload),
-      );
-      if (!updated) throw new Error('Unexpected response');
-      setProfile(updated);
-      setUsername(updated.username ?? '');
-      setDisplayName(updated.displayName ?? '');
-      setBio(updated.bio ?? '');
-      setLocationName(updated.savedLocation ?? '');
-
-      await getSupabase().auth.refreshSession();
-
-      setInfo('Saved');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-full items-center justify-center">
-          <div className="text-sm text-zinc-400">Loading profile…</div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!profile && !error) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-full items-center justify-center">
-          <div className="w-full max-w-md rounded-3xl border border-white/12 bg-white/5 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] backdrop-blur">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
-              Profile
-            </h1>
-            <p className="mt-2 text-sm text-zinc-400">You’re not signed in.</p>
-            <a
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-zinc-50 px-4 text-sm font-medium text-black transition-colors hover:bg-white"
-              href="/auth"
-            >
-              Go to sign in
-            </a>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!profile && error) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-full items-center justify-center">
-          <div className="w-full max-w-md rounded-3xl border border-white/12 bg-white/5 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] backdrop-blur">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
-              Profile
-            </h1>
-            <p className="mt-2 text-sm text-red-300">{error}</p>
-            <a
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl border border-white/12 px-4 text-sm font-medium text-zinc-50"
-              href="/auth"
-            >
-              Back to sign in
-            </a>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!profile) {
-    return null;
-  }
-
   return (
     <DashboardLayout>
       <div className="mx-auto w-full max-w-5xl space-y-6 text-zinc-50">
@@ -406,173 +129,40 @@ export default function ProfilePage() {
                 Profile
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-black dark:text-zinc-50 sm:text-4xl">
-                Shape your profile
+                Photos and interests
               </h1>
               <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                Update your display name, username, and rank the interests that
-                matter most to you.
+                Manage your photo deck and interests here. Account details like
+                username, display name, bio, and location live in Settings.
               </p>
             </div>
-            <button
-              type="button"
+            <Link
+              href="/settings"
               className="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
-              onClick={() => {
-                getSupabase().auth.signOut().finally(() => {
-                  window.location.href = '/auth';
-                });
-              }}
             >
-              Sign out
-            </button>
+              Open settings
+            </Link>
           </div>
 
           <div className="mt-6 rounded-2xl border border-black/8 bg-white p-5 dark:border-white/12 dark:bg-black/30">
-            <div className="space-y-5">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <label
-                  className="text-sm font-medium text-black dark:text-zinc-50"
-                  htmlFor="displayName"
-                >
-                  Display name
-                </label>
-                <input
-                  id="displayName"
-                  type="text"
-                  autoComplete="name"
-                  className="mt-2 h-12 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  disabled={saving}
-                  placeholder="How you want to be shown"
-                />
-                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  Optional. Does not need to be unique.
+                <p className="text-sm font-medium text-black dark:text-zinc-50">
+                  Keep profile edits in Settings
+                </p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  Username, display name, bio, and location are managed on the
+                  settings page so this page can stay focused on photos and
+                  interests.
                 </p>
               </div>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    className="text-sm font-medium text-black dark:text-zinc-50"
-                    htmlFor="bio"
-                  >
-                    Bio
-                  </label>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {bio.length}/{MAX_BIO_LENGTH}
-                  </span>
-                </div>
-                <textarea
-                  id="bio"
-                  rows={4}
-                  maxLength={MAX_BIO_LENGTH}
-                  className="mt-2 w-full rounded-2xl border border-black/8 bg-white px-4 py-3 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  disabled={saving}
-                  placeholder="Tell people a bit about you. What are you into?"
-                />
-                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  Optional. Shown on your Discover card.
-                </p>
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-                <div>
-                  <label
-                    className="text-sm font-medium text-black dark:text-zinc-50"
-                    htmlFor="username"
-                  >
-                    Username
-                  </label>
-                  <input
-                    id="username"
-                    type="text"
-                    autoComplete="username"
-                    className="mt-2 h-12 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    disabled={saving}
-                    placeholder="unique_handle"
-                  />
-                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    Required. Unique in the app (letters, numbers, underscore;
-                    3–30 chars).
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  className="flex h-12 items-center justify-center rounded-2xl bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-                  onClick={() => {
-                    void saveProfile();
-                  }}
-                  disabled={saving}
-                >
-                  {saving ? 'Saving…' : 'Save profile'}
-                </button>
-              </div>
-              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-                <div>
-                  <label
-                    className="text-sm font-medium text-black dark:text-zinc-50"
-                    htmlFor="location"
-                  >
-                    Location
-                  </label>
-                  <div className="flex gap-4">
-                    {locationName !== null && locationName !== '' ? (
-                      <p className="mt-2">{locationName}</p>
-                    ) : (
-                      <p className="mt-2">Not set</p>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (!navigator.geolocation) {
-                          setError(
-                            'Geolocation is not supported by your browser.',
-                          );
-                          return;
-                        }
-
-                        navigator.geolocation.getCurrentPosition(
-                          (position) => {
-                            void saveProfile(position.coords);
-                          },
-                          (e: GeolocationPositionError) => {
-                            setError(
-                              e instanceof Error
-                                ? e.message
-                                : 'Failed to get location.',
-                            );
-                          },
-                        );
-                      }}
-                      disabled={saving}
-                      className="flex items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-                    >
-                      Update Location
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <Link
+                href="/settings"
+                className="inline-flex h-11 items-center justify-center rounded-2xl border border-black/10 px-4 text-sm font-medium text-black transition-colors hover:bg-black hover:text-white dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
+              >
+                Go to settings
+              </Link>
             </div>
-
-            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-              Signed in as {signedInAs}
-            </p>
-
-            {error ? (
-              <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-                {error}
-              </div>
-            ) : null}
-
-            {info ? (
-              <div className="mt-4 rounded-2xl border border-black/8 bg-black/2 px-4 py-3 text-sm text-zinc-700 dark:border-white/12 dark:bg-white/6 dark:text-zinc-200">
-                {info}
-              </div>
-            ) : null}
           </div>
         </div>
 
