@@ -111,6 +111,15 @@ export function buildServer() {
   registerEventsRoutes(app, { supabaseAdmin });
   registerActivityRoutes(app, { supabaseAdmin });
 
+  // Render (and other platforms) may health-check `HEAD /` by default.
+  app.head('/', async (_req, reply) => {
+    return reply.status(200).send();
+  });
+
+  app.get('/', async () => {
+    return { ok: true };
+  });
+
   app.get('/health', async () => {
     return { ok: true };
   });
