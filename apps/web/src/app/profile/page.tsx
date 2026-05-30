@@ -22,6 +22,9 @@ type SelectedInterest = Interest & {
   weight: number;
 };
 
+const MIN_WEIGHT = 0;
+const MAX_WEIGHT = 10;
+
 function InterestCard(props: {
   interest: Interest;
   selected?: SelectedInterest;
