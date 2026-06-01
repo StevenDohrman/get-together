@@ -261,6 +261,18 @@ export default function LandingPage() {
                             <StepCard key={step.step} {...step} />
                         ))}
                     </div>
+
+                    <div className="mt-12 flex flex-col items-center gap-3 text-center">
+                        <p className="text-sm text-slate-400">
+                            Curious about how UConnect works under the hood?
+                        </p>
+                        <Link
+                            href="/about"
+                            className="inline-flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-600/10 px-6 py-3 text-sm font-semibold text-purple-200 transition-colors hover:border-purple-400/60 hover:bg-purple-600/20 hover:text-white"
+                        >
+                            Learn more <span aria-hidden>→</span>
+                        </Link>
+                    </div>
                 </section>
 
                 {/* Use cases */}
