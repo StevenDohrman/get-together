@@ -356,7 +356,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   }, []);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (canSend) void send();
