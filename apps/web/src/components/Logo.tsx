@@ -10,7 +10,14 @@ export default function Logo({ className }: LogoProps) {
             {/* Logo Container */}
             <div className="flex items-center gap-3">
                 {/* Logo Image */}
-                <Image src="/assets/logo.svg" alt="UConnect Logo" width={40} height={40} className={`h-10 w-10 object-contain${className ? ` ${className}` : ''}`} priority />
+                <Image
+                    src="/assets/logo.svg"
+                    alt="UConnect Logo"
+                    width={40}
+                    height={40}
+                    className={['h-10 w-10 object-contain', className].filter(Boolean).join(' ')}
+                    priority
+                />
             </div>
         </div>
     );
