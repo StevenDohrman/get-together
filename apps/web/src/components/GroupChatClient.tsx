@@ -11,7 +11,16 @@ import {
 } from '@/lib/chat';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { initialsFor, pickGradient } from '@/lib/avatarUtils';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactElement,
+} from 'react';
 import DashboardLayout from './DashboardLayout';
 import ErrorMessage from './ErrorMessage';
 import Loading from './Loading';
@@ -29,34 +38,6 @@ type ChatsResponse = { chats: ChatSummary[] };
 type MessagesResponse = { messages: ChatMessage[] };
 
 type ProfileResponse = { appUserId: string | null };
-
-const AVATAR_GRADIENTS = [
-  'from-indigo-500 via-purple-500 to-fuchsia-500',
-  'from-orange-400 via-rose-500 to-pink-600',
-  'from-emerald-400 via-teal-500 to-cyan-600',
-  'from-sky-500 via-blue-600 to-indigo-700',
-  'from-amber-400 via-orange-500 to-red-600',
-  'from-violet-500 via-purple-600 to-indigo-700',
-] as const;
-
-function pickGradient(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
-}
-
-function initialsFor(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((p) => p.charAt(0).toUpperCase())
-      .slice(0, 2)
-      .join('') || '?'
-  );
-}
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
@@ -356,7 +337,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   }, []);
 
   const handleKeyDown = useCallback(
-    (e) => {
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (canSend) void send();
@@ -564,7 +545,7 @@ function MessageList({
   appUserId: string | null;
   onEventUpdated: (next: EventMessagePayload) => void;
 }) {
-  const items: JSX.Element[] = [];
+  const items: ReactElement[] = [];
   let lastDayKey: string | null = null;
   let lastSenderId: string | null = null;
   let lastTimestamp = 0;
