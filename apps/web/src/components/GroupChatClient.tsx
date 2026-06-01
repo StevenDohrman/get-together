@@ -564,7 +564,7 @@ function MessageList({
   appUserId: string | null;
   onEventUpdated: (next: EventMessagePayload) => void;
 }) {
-  const items: React.ReactNode[] = [];
+  const items: JSX.Element[] = [];
   let lastDayKey: string | null = null;
   let lastSenderId: string | null = null;
   let lastTimestamp = 0;
