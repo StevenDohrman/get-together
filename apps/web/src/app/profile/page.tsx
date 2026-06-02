@@ -35,17 +35,10 @@ type SelectedInterest = Interest & {
   weight: number;
 };
 
-type InterestsResponse = {
-  interests: Interest[];
-};
 
-type SelectedInterestsResponse = {
-  interests: SelectedInterest[];
-};
 
 const MIN_WEIGHT = 0;
 const MAX_WEIGHT = 10;
-const DEFAULT_WEIGHT = 5;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -72,18 +65,6 @@ function parseProfile(payload: unknown): ProfilePayload | null {
   };
 }
 
-function clampWeight(value: number): number {
-  return Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, value));
-}
-
-function sortSelectedInterests(
-  interests: SelectedInterest[],
-): SelectedInterest[] {
-  return [...interests].sort((left, right) => {
-    if (right.weight !== left.weight) return right.weight - left.weight;
-    return left.name.localeCompare(right.name);
-  });
-}
 
 function InterestCard(props: {
   interest: Interest;
@@ -156,7 +137,7 @@ export default function ProfilePage() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
 
   const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
   const getSupabase = useCallback(() => {
@@ -265,7 +246,7 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [getSupabase]);
+  }, [getSupabase, refetchInterests]);
 
   async function saveProfile(nextGeoLocation?: GeolocationCoordinates | null) {
     setError(null);
@@ -615,6 +596,7 @@ export default function ProfilePage() {
                 try {
                   const { publicUrl } = await uploadUserPhoto(file);
                   await addPhoto(publicUrl);
+                  setInfo('Uploaded photo — click "Save profile" to set primary photo');
                 } catch (err) {
                   setPhotoFormError(
                     err instanceof Error ? err.message : 'Failed to upload photo',
@@ -655,13 +637,14 @@ export default function ProfilePage() {
             ) : (
               <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 {photos.map((photo, idx) => {
-                  const movePhoto = (delta: number) => {
+                  const movePhoto = async (delta: number) => {
                     const target = idx + delta;
                     if (target < 0 || target >= photos.length) return;
                     const next = photos.slice();
                     const [moved] = next.splice(idx, 1);
                     next.splice(target, 0, moved);
-                    void reorderPhotos(next.map((p) => p.id));
+                    await reorderPhotos(next.map((p) => p.id));
+                    setInfo('Reordered photos — click "Save profile" to update primary photo');
                   };
                   return (
                     <li
@@ -704,9 +687,10 @@ export default function ProfilePage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (!window.confirm('Delete this photo?')) return;
-                            void removePhoto(photo.id);
+                            await removePhoto(photo.id);
+                            setInfo('Removed photo — click "Save profile" to update primary photo');
                           }}
                           disabled={photosBusy}
                           className="text-xs font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"
