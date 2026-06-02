@@ -49,7 +49,18 @@ export default function Sidebar() {
             {/* User Profile */}
             <div className="border-t border-slate-800 pt-4 mt-4">
                 <div className="flex items-center gap-3 px-2">
-                    <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full" />
+                    {profile?.photos && profile.photos.length > 0 ? (
+                        <div
+                            aria-label={profile.displayName ?? profile.username ?? 'Profile photo'}
+                            role="img"
+                            className="w-10 h-10 rounded-full bg-cover bg-center"
+                            style={{ backgroundImage: `url(${profile.photos[0].url})` }}
+                        />
+                    ) : (
+                        <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full flex items-center justify-center text-white font-bold">
+                            {((profile?.displayName ?? profile?.username) || 'U').split(/\s+/).map(s => s.charAt(0)).slice(0, 2).join('')}
+                        </div>
+                    )}
                     <div className="flex-1">
                         {loading ? (
                             <Loading />
