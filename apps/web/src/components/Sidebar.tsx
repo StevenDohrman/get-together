@@ -39,7 +39,6 @@ export default function Sidebar() {
 
   return (
     <aside className="relative flex h-screen w-72 flex-shrink-0 flex-col overflow-hidden border-r border-slate-800/80 bg-slate-950">
-      {/* Aurora glow — same vibe as the dashboard hero & auth card */}
       <div
         aria-hidden
         className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-indigo-600 opacity-25 blur-3xl"
@@ -53,14 +52,12 @@ export default function Sidebar() {
         className="pointer-events-none absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-pink-500 opacity-20 blur-3xl"
       />
 
-      {/* Right-edge hairline that fades into the page */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-purple-500/20 to-transparent"
       />
 
       <div className="relative flex h-full flex-col px-5 pb-5 pt-6">
-        {/* Brand */}
         <Link
           href="/dashboard"
           className="group mb-8 flex items-center gap-3 rounded-2xl px-2 py-1.5 transition-colors hover:bg-white/5"
@@ -76,12 +73,10 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* Section label */}
         <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
           Menu
         </p>
 
-        {/* Navigation */}
         <nav className="flex-1 space-y-1.5">
           {NAV_ITEMS.map((item) => {
             const isActive = isActiveHref(pathname, item.href);
@@ -132,9 +127,7 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* User profile card */}
         <div className="relative mt-4">
-          {/* Soft outer glow, echoing the auth card */}
           <div
             aria-hidden
             className="absolute -inset-px rounded-2xl bg-gradient-to-br from-indigo-500/30 via-purple-500/30 to-pink-500/30 opacity-50 blur-lg"

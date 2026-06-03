@@ -2,7 +2,14 @@
 
 import { apiJson } from '@/lib/api';
 import { getSupabaseBrowserClient } from '@/lib/supabaseBrowser';
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useInterests } from '@/lib/hooks/useInterests';
 import { usePhotos, MAX_PHOTOS } from '@/lib/hooks/usePhotos';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -137,7 +144,9 @@ export default function ProfilePage() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
+  const supabaseRef = useRef<ReturnType<
+    typeof getSupabaseBrowserClient
+  > | null>(null);
   const getSupabase = useCallback(() => {
     if (!supabaseRef.current) {
       supabaseRef.current = getSupabaseBrowserClient();
@@ -149,7 +158,9 @@ export default function ProfilePage() {
   const signedInAs = profile?.email ?? profile?.supabaseUserId ?? '';
   const primaryPhotoUrl = photos[0]?.url ?? null;
   const heroName = displayName.trim() || username.trim() || 'Your profile';
-  const heroHandle = username.trim() ? `@${username.trim()}` : 'Add a username below';
+  const heroHandle = username.trim()
+    ? `@${username.trim()}`
+    : 'Add a username below';
 
   const selectedById = useMemo(() => {
     return new Map(
@@ -162,11 +173,11 @@ export default function ProfilePage() {
     const base = !term
       ? catalog
       : catalog.filter((interest) => {
-        return (
-          interest.name.toLowerCase().includes(term) ||
-          interest.slug.toLowerCase().includes(term)
-        );
-      });
+          return (
+            interest.name.toLowerCase().includes(term) ||
+            interest.slug.toLowerCase().includes(term)
+          );
+        });
     return base.filter((interest) => !selectedById.has(interest.id));
   }, [catalog, deferredSearchTerm, selectedById]);
 
@@ -203,7 +214,8 @@ export default function ProfilePage() {
         }
 
         const accessToken = sessionData.session.access_token;
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+        const apiUrl =
+          process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
         const res = await fetch(`${apiUrl}/profile`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -338,7 +350,9 @@ export default function ProfilePage() {
             <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-indigo-500 opacity-40 blur-3xl" />
             <div className="relative">
               <h1 className="text-2xl font-bold tracking-tight">Profile</h1>
-              <p className="mt-2 text-sm text-purple-100">You&apos;re not signed in.</p>
+              <p className="mt-2 text-sm text-purple-100">
+                You&apos;re not signed in.
+              </p>
               <a
                 className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-white px-4 text-sm font-semibold text-purple-700 transition-colors hover:bg-purple-50"
                 href="/auth"
@@ -357,7 +371,9 @@ export default function ProfilePage() {
       <DashboardLayout>
         <div className="flex h-full items-center justify-center">
           <div className="w-full max-w-md rounded-2xl bg-slate-800 p-6 shadow-lg">
-            <h1 className="text-2xl font-bold tracking-tight text-white">Profile</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Profile
+            </h1>
             <p className="mt-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
               {error}
             </p>
@@ -415,9 +431,11 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => {
-                getSupabase().auth.signOut().finally(() => {
-                  window.location.href = '/auth';
-                });
+                getSupabase()
+                  .auth.signOut()
+                  .finally(() => {
+                    window.location.href = '/auth';
+                  });
               }}
               className="self-start rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
             >
@@ -539,7 +557,8 @@ export default function ProfilePage() {
                   placeholder="unique_handle"
                 />
                 <p className="mt-2 text-xs text-slate-400">
-                  Required. Unique in the app (letters, numbers, underscore; 3–30 chars).
+                  Required. Unique in the app (letters, numbers, underscore;
+                  3–30 chars).
                 </p>
               </div>
 
@@ -567,8 +586,12 @@ export default function ProfilePage() {
                   <span className="mr-2" aria-hidden>
                     📍
                   </span>
-                  <span className={locationName ? 'text-white' : 'text-slate-500'}>
-                    {locationName !== null && locationName !== '' ? locationName : 'Not set'}
+                  <span
+                    className={locationName ? 'text-white' : 'text-slate-500'}
+                  >
+                    {locationName !== null && locationName !== ''
+                      ? locationName
+                      : 'Not set'}
                   </span>
                 </div>
                 <button
@@ -585,7 +608,9 @@ export default function ProfilePage() {
                       },
                       (e: GeolocationPositionError) => {
                         setError(
-                          e instanceof Error ? e.message : 'Failed to get location.',
+                          e instanceof Error
+                            ? e.message
+                            : 'Failed to get location.',
                         );
                       },
                     );
@@ -619,8 +644,9 @@ export default function ProfilePage() {
           <div className="space-y-5 rounded-2xl bg-slate-800 p-6 shadow-lg">
             <div>
               <p className="text-sm text-slate-400">
-                Add up to {MAX_PHOTOS} photos. The first photo is the one shown on
-                your Discover card. JPEG, PNG, or WebP up to {Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB each.
+                Add up to {MAX_PHOTOS} photos. The first photo is the one shown
+                on your Discover card. JPEG, PNG, or WebP up to{' '}
+                {Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB each.
               </p>
               {photosError ? (
                 <p className="mt-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
@@ -635,7 +661,9 @@ export default function ProfilePage() {
                 type="file"
                 accept={ALLOWED_PHOTO_MIME_TYPES.join(',')}
                 className="sr-only"
-                disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
+                disabled={
+                  uploading || photosBusy || photos.length >= MAX_PHOTOS
+                }
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (e.target) e.target.value = '';
@@ -645,14 +673,18 @@ export default function ProfilePage() {
                     setPhotoFormError(`You already have ${MAX_PHOTOS} photos.`);
                     return;
                   }
-                setUploading(true);
-                try {
-                  const { publicUrl } = await uploadUserPhoto(file);
-                  await addPhoto(publicUrl);
-                  setInfo('Uploaded photo - click "Save profile" to set primary photo');
-                } catch (err) {
-                  setPhotoFormError(
-                    err instanceof Error ? err.message : 'Failed to upload photo',
+                  setUploading(true);
+                  try {
+                    const { publicUrl } = await uploadUserPhoto(file);
+                    await addPhoto(publicUrl);
+                    setInfo(
+                      'Uploaded photo - click "Save profile" to set primary photo',
+                    );
+                  } catch (err) {
+                    setPhotoFormError(
+                      err instanceof Error
+                        ? err.message
+                        : 'Failed to upload photo',
                     );
                   } finally {
                     setUploading(false);
@@ -662,7 +694,9 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={() => photoFileInputRef.current?.click()}
-                disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
+                disabled={
+                  uploading || photosBusy || photos.length >= MAX_PHOTOS
+                }
                 className="inline-flex h-12 items-center justify-center rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {uploading
@@ -677,7 +711,6 @@ export default function ProfilePage() {
                 {photoFormError}
               </p>
             ) : null}
-
             <div>
               {photosLoading ? (
                 <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -698,7 +731,9 @@ export default function ProfilePage() {
                       const [moved] = next.splice(idx, 1);
                       next.splice(target, 0, moved);
                       void reorderPhotos(next.map((p) => p.id));
-                      setInfo('Reordered photos - click "Save profile" to update primary photo');
+                      setInfo(
+                        'Reordered photos - click "Save profile" to update primary photo',
+                      );
                     };
                     return (
                       <li
@@ -741,11 +776,13 @@ export default function ProfilePage() {
                           </div>
                           <button
                             type="button"
-                          onClick={() => {
-                            if (!window.confirm('Delete this photo?')) return;
-                            void removePhoto(photo.id);
-                            setInfo('Removed photo - click "Save profile" to update primary photo');
-                          }}
+                            onClick={() => {
+                              if (!window.confirm('Delete this photo?')) return;
+                              void removePhoto(photo.id);
+                              setInfo(
+                                'Removed photo - click "Save profile" to update primary photo',
+                              );
+                            }}
                             disabled={photosBusy}
                             className="text-xs font-semibold text-rose-400 transition-colors hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -766,7 +803,8 @@ export default function ProfilePage() {
           <div className="rounded-2xl bg-slate-800 p-6 shadow-lg">
             <div className="mb-5">
               <p className="text-sm text-slate-400">
-                Search the catalog, add what fits, then score each one from 0 to 10.
+                Search the catalog, add what fits, then score each one from 0 to
+                10.
               </p>
               {interestError ? (
                 <p className="mt-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
@@ -840,8 +878,11 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-2">
                     <span
                       aria-live="polite"
-                      className={`inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-opacity duration-150 ${interestSaving ? 'opacity-100' : 'pointer-events-none opacity-0'
-                        }`}
+                      className={`inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-opacity duration-150 ${
+                        interestSaving
+                          ? 'opacity-100'
+                          : 'pointer-events-none opacity-0'
+                      }`}
                     >
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400" />
                       Saving…
@@ -865,7 +906,9 @@ export default function ProfilePage() {
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
-                            <p className="font-medium text-white">{interest.name}</p>
+                            <p className="font-medium text-white">
+                              {interest.name}
+                            </p>
                           </div>
                           <button
                             type="button"
