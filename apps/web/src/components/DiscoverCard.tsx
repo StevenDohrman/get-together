@@ -1,5 +1,6 @@
 'use client';
 
+import { initialsFor, pickGradient } from '@/lib/avatarUtils';
 import { useMemo } from 'react';
 import type { DiscoveryUser, DistanceBucket } from '@/lib/hooks/useDiscovery';
 
@@ -8,32 +9,6 @@ type Props = {
     disabled?: boolean;
     onSwipe?: (id: string, decision: 'YES' | 'NO') => void;
 };
-
-const PHOTO_GRADIENTS = [
-    'bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500',
-    'bg-gradient-to-br from-orange-400 via-rose-500 to-pink-600',
-    'bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600',
-    'bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700',
-    'bg-gradient-to-br from-amber-400 via-orange-500 to-red-600',
-    'bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700',
-] as const;
-
-function pickGradient(seed: string): string {
-    let h = 0;
-    for (let i = 0; i < seed.length; i += 1) {
-        h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    }
-    return PHOTO_GRADIENTS[h % PHOTO_GRADIENTS.length];
-}
-
-function initialsFor(name: string): string {
-    return name
-        .split(/\s+/)
-        .filter(Boolean)
-        .map(part => part.charAt(0).toUpperCase())
-        .slice(0, 2)
-        .join('') || '?';
-}
 
 const DISTANCE_BUCKET_LABELS: Record<DistanceBucket, string> = {
     NEARBY: 'Nearby',
@@ -79,7 +54,7 @@ export default function DiscoverCard({ user, disabled = false, onSwipe }: Props)
             id={`discover-card-${user.id}`}
             className="overflow-hidden rounded-3xl bg-slate-900 shadow-2xl ring-1 ring-white/10"
         >
-            <div className={`relative aspect-[4/5] w-full ${gradient}`}>
+            <div className={`relative aspect-[4/5] w-full bg-gradient-to-br ${gradient}`}>
                 {user.avatarUrl ? (
                     <>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
