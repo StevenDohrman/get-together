@@ -6,6 +6,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { useInterests } from '@/lib/hooks/useInterests';
 import { usePhotos, MAX_PHOTOS } from '@/lib/hooks/usePhotos';
 import DashboardLayout from '@/components/DashboardLayout';
+import SectionHeader from '@/components/SectionHeader';
 import {
   ALLOWED_PHOTO_MIME_TYPES,
   MAX_PHOTO_BYTES,
@@ -35,8 +36,6 @@ type SelectedInterest = Interest & {
   weight: number;
 };
 
-
-
 const MIN_WEIGHT = 0;
 const MAX_WEIGHT = 10;
 
@@ -65,7 +64,6 @@ function parseProfile(payload: unknown): ProfilePayload | null {
   };
 }
 
-
 function InterestCard(props: {
   interest: Interest;
   selected?: SelectedInterest;
@@ -74,13 +72,11 @@ function InterestCard(props: {
   const { interest, selected, onToggle } = props;
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl border border-black/8 bg-zinc-50 px-4 py-4 dark:border-white/12 dark:bg-white/4">
+    <div className="flex items-start justify-between gap-3 rounded-xl bg-slate-800/70 px-4 py-3 transition-colors hover:bg-slate-800">
       <div className="min-w-0">
-        <p className="font-medium text-black dark:text-zinc-50">
-          {interest.name}
-        </p>
+        <p className="font-medium text-white">{interest.name}</p>
         {selected ? (
-          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+          <p className="mt-1 text-xs text-slate-400">
             Currently ranked {selected.weight}/10
           </p>
         ) : null}
@@ -88,8 +84,12 @@ function InterestCard(props: {
 
       <button
         type="button"
-        className="shrink-0 rounded-full border border-black/10 px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-black hover:text-white dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
         onClick={onToggle}
+        className={
+          selected
+            ? 'shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700'
+            : 'shrink-0 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-purple-500'
+        }
       >
         {selected ? 'Selected' : 'Add'}
       </button>
@@ -137,8 +137,6 @@ export default function ProfilePage() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
-
-
   const supabaseRef = useRef<ReturnType<typeof getSupabaseBrowserClient> | null>(null);
   const getSupabase = useCallback(() => {
     if (!supabaseRef.current) {
@@ -149,6 +147,9 @@ export default function ProfilePage() {
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   const signedInAs = profile?.email ?? profile?.supabaseUserId ?? '';
+  const primaryPhotoUrl = photos[0]?.url ?? null;
+  const heroName = displayName.trim() || username.trim() || 'Your profile';
+  const heroHandle = username.trim() ? `@${username.trim()}` : 'Add a username below';
 
   const selectedById = useMemo(() => {
     return new Map(
@@ -166,12 +167,9 @@ export default function ProfilePage() {
           interest.slug.toLowerCase().includes(term)
         );
       });
-    // Exclude interests that are already selected
     return base.filter((interest) => !selectedById.has(interest.id));
   }, [catalog, deferredSearchTerm, selectedById]);
 
-  // When a user is actively dragging a slider, keep the current order
-  // until they finish to avoid the element jumping away from the pointer.
   useEffect(() => {
     if (!draggingId) return;
     const finish = () => {
@@ -231,7 +229,6 @@ export default function ProfilePage() {
         setBio(parsed.bio ?? '');
         setLocationName(parsed.savedLocation ?? '');
         setLoading(false);
-        // Trigger interests hook to (re)fetch using current auth token
         void refetchInterests();
       } catch (e) {
         if (!cancelled) {
@@ -319,13 +316,14 @@ export default function ProfilePage() {
     }
   }
 
-
-
   if (loading) {
     return (
       <DashboardLayout>
         <div className="flex h-full items-center justify-center">
-          <div className="text-sm text-zinc-400">Loading profile…</div>
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <div className="h-3 w-3 animate-pulse rounded-full bg-slate-500" />
+            <span>Loading profile…</span>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -335,17 +333,19 @@ export default function ProfilePage() {
     return (
       <DashboardLayout>
         <div className="flex h-full items-center justify-center">
-          <div className="w-full max-w-md rounded-3xl border border-white/12 bg-white/5 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] backdrop-blur">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
-              Profile
-            </h1>
-            <p className="mt-2 text-sm text-zinc-400">You’re not signed in.</p>
-            <a
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-zinc-50 px-4 text-sm font-medium text-black transition-colors hover:bg-white"
-              href="/auth"
-            >
-              Go to sign in
-            </a>
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-600 p-8 text-white shadow-xl">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-orange-400 opacity-40 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-indigo-500 opacity-40 blur-3xl" />
+            <div className="relative">
+              <h1 className="text-2xl font-bold tracking-tight">Profile</h1>
+              <p className="mt-2 text-sm text-purple-100">You&apos;re not signed in.</p>
+              <a
+                className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-white px-4 text-sm font-semibold text-purple-700 transition-colors hover:bg-purple-50"
+                href="/auth"
+              >
+                Go to sign in
+              </a>
+            </div>
           </div>
         </div>
       </DashboardLayout>
@@ -356,13 +356,13 @@ export default function ProfilePage() {
     return (
       <DashboardLayout>
         <div className="flex h-full items-center justify-center">
-          <div className="w-full max-w-md rounded-3xl border border-white/12 bg-white/5 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] backdrop-blur">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">
-              Profile
-            </h1>
-            <p className="mt-2 text-sm text-red-300">{error}</p>
+          <div className="w-full max-w-md rounded-2xl bg-slate-800 p-6 shadow-lg">
+            <h1 className="text-2xl font-bold tracking-tight text-white">Profile</h1>
+            <p className="mt-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+              {error}
+            </p>
             <a
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl border border-white/12 px-4 text-sm font-medium text-zinc-50"
+              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700"
               href="/auth"
             >
               Back to sign in
@@ -379,480 +379,532 @@ export default function ProfilePage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-5xl space-y-6 text-zinc-50">
-        <div className="rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
-                Profile
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-black dark:text-zinc-50 sm:text-4xl">
-                Shape your profile
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                Update your display name, username, and rank the interests that
-                matter most to you.
-              </p>
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-600 p-8 text-white shadow-xl">
+          <div className="pointer-events-none absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-orange-400 opacity-50 blur-3xl" />
+          <div className="pointer-events-none absolute right-0 top-12 h-72 w-72 rounded-full bg-pink-500 opacity-40 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-72 w-72 rounded-full bg-indigo-500 opacity-40 blur-3xl" />
+
+          <div className="relative flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-5">
+              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/15 ring-2 ring-white/30 backdrop-blur-sm">
+                {primaryPhotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={primaryPhotoUrl}
+                    alt="Primary profile photo"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-3xl">
+                    👤
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-purple-100/80">
+                  Your profile
+                </p>
+                <h1 className="mt-1 truncate text-4xl font-bold tracking-tight">
+                  {heroName}
+                </h1>
+                <p className="mt-1 text-sm text-purple-100">{heroHandle}</p>
+              </div>
             </div>
+
             <button
               type="button"
-              className="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
               onClick={() => {
                 getSupabase().auth.signOut().finally(() => {
                   window.location.href = '/auth';
                 });
               }}
+              className="self-start rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
             >
               Sign out
             </button>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-black/8 bg-white p-5 dark:border-white/12 dark:bg-black/30">
-            <div className="space-y-5">
+          <div className="relative mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 text-xl backdrop-blur-sm">
+                📸
+              </div>
+              <div>
+                <p className="text-2xl font-bold leading-none text-white">
+                  {photos.length}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wider text-purple-100/80">
+                  Photos
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 text-xl backdrop-blur-sm">
+                ⭐
+              </div>
+              <div>
+                <p className="text-2xl font-bold leading-none text-white">
+                  {selectedInterests.length}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wider text-purple-100/80">
+                  Interests
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 text-xl backdrop-blur-sm">
+                📍
+              </div>
+              <div>
+                <p className="truncate text-2xl font-bold leading-none text-white">
+                  {locationName ? locationName : 'Not set'}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wider text-purple-100/80">
+                  Location
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section>
+          <SectionHeader title="Profile info" />
+          <div className="space-y-5 rounded-2xl bg-slate-800 p-6 shadow-lg">
+            <div>
+              <label
+                className="text-sm font-semibold text-white"
+                htmlFor="displayName"
+              >
+                Display name
+              </label>
+              <input
+                id="displayName"
+                type="text"
+                autoComplete="name"
+                className="mt-2 h-12 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-purple-500"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={saving}
+                placeholder="How you want to be shown"
+              />
+              <p className="mt-2 text-xs text-slate-400">
+                Optional. Does not need to be unique.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <label
+                  className="text-sm font-semibold text-white"
+                  htmlFor="bio"
+                >
+                  Bio
+                </label>
+                <span className="text-xs text-slate-400">
+                  {bio.length}/{MAX_BIO_LENGTH}
+                </span>
+              </div>
+              <textarea
+                id="bio"
+                rows={4}
+                maxLength={MAX_BIO_LENGTH}
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-purple-500"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                disabled={saving}
+                placeholder="Tell people a bit about you. What are you into?"
+              />
+              <p className="mt-2 text-xs text-slate-400">
+                Optional. Shown on your Discover card.
+              </p>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
               <div>
                 <label
-                  className="text-sm font-medium text-black dark:text-zinc-50"
-                  htmlFor="displayName"
+                  className="text-sm font-semibold text-white"
+                  htmlFor="username"
                 >
-                  Display name
+                  Username
                 </label>
                 <input
-                  id="displayName"
+                  id="username"
                   type="text"
-                  autoComplete="name"
-                  className="mt-2 h-12 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
+                  autoComplete="username"
+                  className="mt-2 h-12 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-purple-500"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   disabled={saving}
-                  placeholder="How you want to be shown"
+                  placeholder="unique_handle"
                 />
-                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  Optional. Does not need to be unique.
+                <p className="mt-2 text-xs text-slate-400">
+                  Required. Unique in the app (letters, numbers, underscore; 3–30 chars).
                 </p>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    className="text-sm font-medium text-black dark:text-zinc-50"
-                    htmlFor="bio"
-                  >
-                    Bio
-                  </label>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {bio.length}/{MAX_BIO_LENGTH}
+              <button
+                type="button"
+                onClick={() => {
+                  void saveProfile();
+                }}
+                disabled={saving}
+                className="flex h-12 items-center justify-center rounded-xl bg-purple-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? 'Saving…' : 'Save profile'}
+              </button>
+            </div>
+
+            <div>
+              <label
+                className="text-sm font-semibold text-white"
+                htmlFor="location"
+              >
+                Location
+              </label>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <div className="flex h-12 flex-1 items-center rounded-xl border border-slate-700 bg-slate-900 px-4 text-sm text-white">
+                  <span className="mr-2" aria-hidden>
+                    📍
+                  </span>
+                  <span className={locationName ? 'text-white' : 'text-slate-500'}>
+                    {locationName !== null && locationName !== '' ? locationName : 'Not set'}
                   </span>
                 </div>
-                <textarea
-                  id="bio"
-                  rows={4}
-                  maxLength={MAX_BIO_LENGTH}
-                  className="mt-2 w-full rounded-2xl border border-black/8 bg-white px-4 py-3 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  disabled={saving}
-                  placeholder="Tell people a bit about you. What are you into?"
-                />
-                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  Optional. Shown on your Discover card.
-                </p>
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-                <div>
-                  <label
-                    className="text-sm font-medium text-black dark:text-zinc-50"
-                    htmlFor="username"
-                  >
-                    Username
-                  </label>
-                  <input
-                    id="username"
-                    type="text"
-                    autoComplete="username"
-                    className="mt-2 h-12 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    disabled={saving}
-                    placeholder="unique_handle"
-                  />
-                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    Required. Unique in the app (letters, numbers, underscore;
-                    3–30 chars).
-                  </p>
-                </div>
-
                 <button
                   type="button"
-                  className="flex h-12 items-center justify-center rounded-2xl bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
                   onClick={() => {
-                    void saveProfile();
+                    if (!navigator.geolocation) {
+                      setError('Geolocation is not supported by your browser.');
+                      return;
+                    }
+
+                    navigator.geolocation.getCurrentPosition(
+                      (position) => {
+                        void saveProfile(position.coords);
+                      },
+                      (e: GeolocationPositionError) => {
+                        setError(
+                          e instanceof Error ? e.message : 'Failed to get location.',
+                        );
+                      },
+                    );
                   }}
                   disabled={saving}
+                  className="flex h-12 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Save profile'}
+                  Update location
                 </button>
-              </div>
-              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-                <div>
-                  <label
-                    className="text-sm font-medium text-black dark:text-zinc-50"
-                    htmlFor="location"
-                  >
-                    Location
-                  </label>
-                  <div className="flex gap-4">
-                    {locationName !== null && locationName !== '' ? (
-                      <p className="mt-2">{locationName}</p>
-                    ) : (
-                      <p className="mt-2">Not set</p>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (!navigator.geolocation) {
-                          setError(
-                            'Geolocation is not supported by your browser.',
-                          );
-                          return;
-                        }
-
-                        navigator.geolocation.getCurrentPosition(
-                          (position) => {
-                            void saveProfile(position.coords);
-                          },
-                          (e: GeolocationPositionError) => {
-                            setError(
-                              e instanceof Error
-                                ? e.message
-                                : 'Failed to get location.',
-                            );
-                          },
-                        );
-                      }}
-                      disabled={saving}
-                      className="flex items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-                    >
-                      Update Location
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
 
-            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-              Signed in as {signedInAs}
-            </p>
+            <p className="text-xs text-slate-500">Signed in as {signedInAs}</p>
 
             {error ? (
-              <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              <div className="rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
                 {error}
               </div>
             ) : null}
 
             {info ? (
-              <div className="mt-4 rounded-2xl border border-black/8 bg-black/2 px-4 py-3 text-sm text-zinc-700 dark:border-white/12 dark:bg-white/6 dark:text-zinc-200">
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-300">
                 {info}
               </div>
             ) : null}
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
-              Photo deck
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-              Your photo slides
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Add up to {MAX_PHOTOS} photos. The first photo is the one shown on
-              your Discover card. JPEG, PNG, or WebP up to {Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB each.
-            </p>
-            {photosError ? (
-              <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                {photosError}
+        <section>
+          <SectionHeader title="Photo deck" />
+          <div className="space-y-5 rounded-2xl bg-slate-800 p-6 shadow-lg">
+            <div>
+              <p className="text-sm text-slate-400">
+                Add up to {MAX_PHOTOS} photos. The first photo is the one shown on
+                your Discover card. JPEG, PNG, or WebP up to {Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB each.
               </p>
-            ) : null}
-          </div>
+              {photosError ? (
+                <p className="mt-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+                  {photosError}
+                </p>
+              ) : null}
+            </div>
 
-          <div className="mt-5">
-            <input
-              ref={photoFileInputRef}
-              type="file"
-              accept={ALLOWED_PHOTO_MIME_TYPES.join(',')}
-              className="sr-only"
-              disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (e.target) e.target.value = '';
-                if (!file) return;
-                setPhotoFormError(null);
-                if (photos.length >= MAX_PHOTOS) {
-                  setPhotoFormError(`You already have ${MAX_PHOTOS} photos.`);
-                  return;
-                }
+            <div>
+              <input
+                ref={photoFileInputRef}
+                type="file"
+                accept={ALLOWED_PHOTO_MIME_TYPES.join(',')}
+                className="sr-only"
+                disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (e.target) e.target.value = '';
+                  if (!file) return;
+                  setPhotoFormError(null);
+                  if (photos.length >= MAX_PHOTOS) {
+                    setPhotoFormError(`You already have ${MAX_PHOTOS} photos.`);
+                    return;
+                  }
                 setUploading(true);
                 try {
                   const { publicUrl } = await uploadUserPhoto(file);
                   await addPhoto(publicUrl);
-                  setInfo('Uploaded photo — click "Save profile" to set primary photo');
+                  setInfo('Uploaded photo - click "Save profile" to set primary photo');
                 } catch (err) {
                   setPhotoFormError(
                     err instanceof Error ? err.message : 'Failed to upload photo',
-                  );
-                } finally {
-                  setUploading(false);
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => photoFileInputRef.current?.click()}
-              disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
-              className="inline-flex h-12 items-center justify-center rounded-2xl bg-black px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-            >
-              {uploading
-                ? 'Uploading…'
-                : photos.length >= MAX_PHOTOS
-                  ? `Photo deck full (${MAX_PHOTOS}/${MAX_PHOTOS})`
-                  : `Upload photo (${photos.length}/${MAX_PHOTOS})`}
-            </button>
-          </div>
-          {photoFormError ? (
-            <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-              {photoFormError}
-            </p>
-          ) : null}
-
-          <div className="mt-5">
-            {photosLoading ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Loading photos…
-              </p>
-            ) : photos.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400">
-                No photos yet. Add one above to start your deck.
-              </div>
-            ) : (
-              <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {photos.map((photo, idx) => {
-                  const movePhoto = async (delta: number) => {
-                    const target = idx + delta;
-                    if (target < 0 || target >= photos.length) return;
-                    const next = photos.slice();
-                    const [moved] = next.splice(idx, 1);
-                    next.splice(target, 0, moved);
-                    await reorderPhotos(next.map((p) => p.id));
-                    setInfo('Reordered photos — click "Save profile" to update primary photo');
-                  };
-                  return (
-                    <li
-                      key={photo.id}
-                      className="overflow-hidden rounded-2xl border border-black/8 bg-zinc-50 dark:border-white/12 dark:bg-white/4"
-                    >
-                      <div className="relative aspect-square w-full bg-zinc-200 dark:bg-zinc-900">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={photo.url}
-                          alt={`Photo slide ${idx + 1}`}
-                          className="absolute inset-0 h-full w-full object-cover"
-                        />
-                        {idx === 0 ? (
-                          <span className="absolute left-2 top-2 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                            Primary
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="flex items-center justify-between gap-2 p-3">
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => movePhoto(-1)}
-                            disabled={photosBusy || idx === 0}
-                            className="rounded-md border border-black/10 px-2 py-1 text-xs text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
-                            aria-label="Move photo up"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => movePhoto(1)}
-                            disabled={photosBusy || idx === photos.length - 1}
-                            className="rounded-md border border-black/10 px-2 py-1 text-xs text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
-                            aria-label="Move photo down"
-                          >
-                            ↓
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (!window.confirm('Delete this photo?')) return;
-                            await removePhoto(photo.id);
-                            setInfo('Removed photo — click "Save profile" to update primary photo');
-                          }}
-                          disabled={photosBusy}
-                          className="text-xs font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-black/8 bg-white/80 p-6 shadow-[0_24px_80px_rgba(24,24,24,0.08)] backdrop-blur dark:border-white/12 dark:bg-white/5">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
-              Interests
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-              Pick and rank your interests
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Search the catalog, add what fits, then score each one from 0 to
-              10.
-            </p>
-            {interestSaving ? (
-              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                Saving your interests…
-              </p>
-            ) : null}
-            {interestError ? (
-              <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                {interestError}
-              </p>
-            ) : null}
-            {interestInfo ? (
-              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                {interestInfo}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-2xl border border-black/8 bg-white p-4 dark:border-white/12 dark:bg-black/30">
-              <label
-                className="text-sm font-medium text-black dark:text-zinc-50"
-                htmlFor="interest-search"
-              >
-                Search interests
-              </label>
-              <input
-                id="interest-search"
-                type="search"
-                className="mt-2 h-11 w-full rounded-2xl border border-black/8 bg-white px-4 text-sm text-black outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/12 dark:bg-black dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-white/30"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search for interests"
-              />
-
-              <div className="mt-4 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-                <span>{filteredCatalog.length} results</span>
-                {interestsLoading ? <span>Loading catalog…</span> : null}
-              </div>
-
-              <div className="mt-4 max-h-128 space-y-3 overflow-auto pr-1">
-                {filteredCatalog.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400">
-                    No interests match that search.
-                  </div>
-                ) : (
-                  filteredCatalog.map((interest) => {
-                    const selected = selectedById.get(interest.id);
-                    return (
-                      <InterestCard
-                        key={interest.id}
-                        interest={interest}
-                        selected={selected}
-                        onToggle={() => {
-                          if (selected) {
-                            removeInterest(interest.id);
-                          } else {
-                            addInterest(interest);
-                          }
-                        }}
-                      />
                     );
-                  })
-                )}
-              </div>
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => photoFileInputRef.current?.click()}
+                disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {uploading
+                  ? 'Uploading…'
+                  : photos.length >= MAX_PHOTOS
+                    ? `Photo deck full (${MAX_PHOTOS}/${MAX_PHOTOS})`
+                    : `Upload photo (${photos.length}/${MAX_PHOTOS})`}
+              </button>
+            </div>
+            {photoFormError ? (
+              <p className="rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+                {photoFormError}
+              </p>
+            ) : null}
+
+            <div>
+              {photosLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <div className="h-3 w-3 animate-pulse rounded-full bg-slate-500" />
+                  <span>Loading photos…</span>
+                </div>
+              ) : photos.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/30 p-8 text-center text-sm text-slate-400">
+                  No photos yet. Add one above to start your deck.
+                </div>
+              ) : (
+                <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {photos.map((photo, idx) => {
+                    const movePhoto = (delta: number) => {
+                      const target = idx + delta;
+                      if (target < 0 || target >= photos.length) return;
+                      const next = photos.slice();
+                      const [moved] = next.splice(idx, 1);
+                      next.splice(target, 0, moved);
+                      void reorderPhotos(next.map((p) => p.id));
+                      setInfo('Reordered photos - click "Save profile" to update primary photo');
+                    };
+                    return (
+                      <li
+                        key={photo.id}
+                        className="overflow-hidden rounded-xl bg-slate-900/60 ring-1 ring-slate-800 transition-colors hover:bg-slate-900"
+                      >
+                        <div className="relative aspect-square w-full bg-slate-950">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={photo.url}
+                            alt={`Photo slide ${idx + 1}`}
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                          {idx === 0 ? (
+                            <span className="absolute left-2 top-2 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-lg">
+                              Primary
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 p-3">
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => movePhoto(-1)}
+                              disabled={photosBusy || idx === 0}
+                              className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Move photo up"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => movePhoto(1)}
+                              disabled={photosBusy || idx === photos.length - 1}
+                              className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Move photo down"
+                            >
+                              ↓
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                          onClick={() => {
+                            if (!window.confirm('Delete this photo?')) return;
+                            void removePhoto(photo.id);
+                            setInfo('Removed photo - click "Save profile" to update primary photo');
+                          }}
+                            disabled={photosBusy}
+                            className="text-xs font-semibold text-rose-400 transition-colors hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <SectionHeader title="Pick and rank your interests" />
+          <div className="rounded-2xl bg-slate-800 p-6 shadow-lg">
+            <div className="mb-5">
+              <p className="text-sm text-slate-400">
+                Search the catalog, add what fits, then score each one from 0 to 10.
+              </p>
+              {interestError ? (
+                <p className="mt-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+                  {interestError}
+                </p>
+              ) : null}
+              {interestInfo ? (
+                <p className="mt-2 text-sm text-slate-400">{interestInfo}</p>
+              ) : null}
             </div>
 
-            <div className="rounded-2xl border border-black/8 bg-white p-4 dark:border-white/12 dark:bg-black/30">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-black dark:text-zinc-50">
-                    Selected interests
-                  </h3>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    Adjust the score for each selected interest.
-                  </p>
+            <div className="grid items-start gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-xl bg-slate-900/60 p-4 ring-1 ring-slate-800">
+                <label
+                  className="text-sm font-semibold text-white"
+                  htmlFor="interest-search"
+                >
+                  Search interests
+                </label>
+                <input
+                  id="interest-search"
+                  type="search"
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-purple-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search for interests"
+                />
+
+                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+                  <span>{filteredCatalog.length} results</span>
+                  {interestsLoading ? <span>Loading catalog…</span> : null}
                 </div>
-                <span className="rounded-full bg-black px-3 py-1 text-xs font-medium text-white dark:bg-zinc-50 dark:text-black">
-                  {selectedInterests.length}
-                </span>
+
+                <div className="mt-4 max-h-128 space-y-2 overflow-auto pr-1">
+                  {filteredCatalog.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-4 py-8 text-sm text-slate-400">
+                      No interests match that search.
+                    </div>
+                  ) : (
+                    filteredCatalog.map((interest) => {
+                      const selected = selectedById.get(interest.id);
+                      return (
+                        <InterestCard
+                          key={interest.id}
+                          interest={interest}
+                          selected={selected}
+                          onToggle={() => {
+                            if (selected) {
+                              removeInterest(interest.id);
+                            } else {
+                              addInterest(interest);
+                            }
+                          }}
+                        />
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
-              <div className="mt-4 max-h-145 space-y-3 overflow-auto pr-1">
-                {selectedInterests.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-sm text-zinc-500 dark:border-white/15 dark:text-zinc-400">
-                    No interests selected yet.
+              <div className="rounded-xl bg-slate-900/60 p-4 ring-1 ring-slate-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">
+                      Selected interests
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Adjust the score for each selected interest.
+                    </p>
                   </div>
-                ) : (
-                  selectedInterests.map((interest) => (
-                    <div
-                      key={interest.id}
-                      className="rounded-2xl border border-black/8 bg-zinc-50 p-4 dark:border-white/12 dark:bg-white/4"
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-live="polite"
+                      className={`inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition-opacity duration-150 ${interestSaving ? 'opacity-100' : 'pointer-events-none opacity-0'
+                        }`}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="font-medium text-black dark:text-zinc-50">
-                            {interest.name}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-zinc-600 hover:underline dark:text-zinc-300"
-                          onClick={() => removeInterest(interest.id)}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400" />
+                      Saving…
+                    </span>
+                    <span className="rounded-full bg-purple-600 px-3 py-1 text-xs font-bold text-white">
+                      {selectedInterests.length}
+                    </span>
+                  </div>
+                </div>
 
-                      <div className="mt-4 flex items-center gap-3">
-                        <input
-                          type="range"
-                          min={MIN_WEIGHT}
-                          max={MAX_WEIGHT}
-                          step={1}
-                          value={interest.weight}
-                          onPointerDown={() => startDragging(interest.id)}
-                          onChange={(e) =>
-                            updateInterestWeight(
-                              interest.id,
-                              Number(e.target.value),
-                            )
-                          }
-                          className="w-full accent-black dark:accent-zinc-50"
-                          aria-label={`Importance for ${interest.name}`}
-                        />
-                        <div className="flex w-14 items-center justify-center rounded-full border border-black/10 bg-white px-2 py-1 text-sm font-semibold text-black dark:border-white/12 dark:bg-black dark:text-zinc-50">
-                          {interest.weight}
+                <div className="mt-4 max-h-145 space-y-3 overflow-auto pr-1">
+                  {selectedInterests.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-4 py-8 text-sm text-slate-400">
+                      No interests selected yet.
+                    </div>
+                  ) : (
+                    selectedInterests.map((interest) => (
+                      <div
+                        key={interest.id}
+                        className="rounded-xl bg-slate-800/80 p-4 ring-1 ring-slate-700/60"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="font-medium text-white">{interest.name}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-slate-400 transition-colors hover:text-rose-400"
+                            onClick={() => removeInterest(interest.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        <div className="mt-4 flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={MIN_WEIGHT}
+                            max={MAX_WEIGHT}
+                            step={1}
+                            value={interest.weight}
+                            onPointerDown={() => startDragging(interest.id)}
+                            onChange={(e) =>
+                              updateInterestWeight(
+                                interest.id,
+                                Number(e.target.value),
+                              )
+                            }
+                            className="w-full accent-purple-500"
+                            aria-label={`Importance for ${interest.name}`}
+                          />
+                          <div className="flex w-12 items-center justify-center rounded-full bg-purple-600 px-2 py-1 text-sm font-bold text-white">
+                            {interest.weight}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </DashboardLayout>
   );
