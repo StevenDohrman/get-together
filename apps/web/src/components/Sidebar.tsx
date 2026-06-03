@@ -58,7 +58,7 @@ export default function Sidebar() {
                         />
                     ) : (
                         <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full flex items-center justify-center text-white font-bold">
-                            {((profile?.displayName ?? profile?.username) || 'U').split(/\s+/).map(s => s.charAt(0)).slice(0, 2).join('')}
+                            {(((profile?.displayName ?? profile?.username) || 'U').split(/\s+/).filter(Boolean).map((s) => s.charAt(0).toUpperCase()).slice(0, 2).join(''))}
                         </div>
                     )}
                     <div className="flex-1">

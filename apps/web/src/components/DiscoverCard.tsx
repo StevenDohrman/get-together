@@ -81,12 +81,16 @@ export default function DiscoverCard({ user, disabled = false, onSwipe }: Props)
         >
             <div className={`relative aspect-[4/5] w-full ${gradient}`}>
                 {user.avatarUrl ? (
-                    <div
-                        aria-label={displayName}
-                        role="img"
-                        className="absolute inset-0 bg-cover bg-center"
-                        style={{ backgroundImage: `url(${user.avatarUrl})` }}
-                    />
+                    <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={user.avatarUrl}
+                            alt={displayName}
+                            loading="lazy"
+                            decoding="async"
+                            className="absolute inset-0 h-full w-full object-cover"
+                        />
+                    </>
                 ) : (
                     <div className="flex h-full w-full items-center justify-center">
                         <span
