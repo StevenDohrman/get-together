@@ -676,7 +676,7 @@ export default function ProfilePage() {
                 {photoFormError}
               </p>
             ) : null}
-
+          </div>
           <div className="mt-5">
             <input
               ref={photoFileInputRef}
@@ -707,18 +707,6 @@ export default function ProfilePage() {
                 }
               }}
             />
-            <button
-              type="button"
-              onClick={() => photoFileInputRef.current?.click()}
-              disabled={uploading || photosBusy || photos.length >= MAX_PHOTOS}
-              className="inline-flex h-12 items-center justify-center rounded-2xl bg-black px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-black dark:hover:bg-white"
-            >
-              {uploading
-                ? 'Uploading…'
-                : photos.length >= MAX_PHOTOS
-                  ? `Photo deck full (${MAX_PHOTOS}/${MAX_PHOTOS})`
-                  : `Upload photo (${photos.length}/${MAX_PHOTOS})`}
-            </button>
           </div>
           {photoFormError ? (
             <p className="mt-2 text-sm text-red-700 dark:text-red-300">
@@ -778,14 +766,12 @@ export default function ProfilePage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!window.confirm('Delete this photo?')) return;
-                              void removePhoto(photo.id);
-                            }}
-                            disabled={photosBusy}
-                            className="text-xs font-semibold text-rose-400 transition-colors hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => movePhoto(1)}
+                            disabled={photosBusy || idx === photos.length - 1}
+                            className="rounded-md border border-black/10 px-2 py-1 text-xs text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-zinc-50 dark:hover:bg-white dark:hover:text-black"
+                            aria-label="Move photo down"
                           >
-                            Remove
+                            ↓
                           </button>
                         </div>
                         <button

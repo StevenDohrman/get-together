@@ -1,11 +1,11 @@
 'use client';
 
-import Logo from './Logo';
+import { useProfile } from '@/lib/hooks/useProfile';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useProfile } from '@/lib/hooks/useProfile';
-import Loading from './Loading';
 import ErrorMessage from './ErrorMessage';
+import Loading from './Loading';
+import Logo from './Logo';
 
 type NavItem = {
     href: string;
@@ -128,58 +128,6 @@ export default function Sidebar() {
                             </Link>
                         );
                     })}
-                </nav>
-
-                {/* User profile card */}
-                <div className="relative mt-4">
-                    {/* Soft outer glow, echoing the auth card */}
-                    <div
-                        aria-hidden
-                        className="absolute -inset-px rounded-2xl bg-gradient-to-br from-indigo-500/30 via-purple-500/30 to-pink-500/30 opacity-50 blur-lg"
-                    />
-
-                    <Link
-                        href="/profile"
-                        className="relative flex items-center gap-3 overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/80 px-3 py-3 backdrop-blur-xl transition-colors hover:border-slate-700 hover:bg-slate-900"
-                    >
-                        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-600 text-sm font-bold text-white shadow-md shadow-pink-900/40">
-                            {loading ? (
-                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                            ) : (
-                                initial
-                            )}
-                            <span
-                                aria-hidden
-                                className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-900 bg-emerald-400"
-                            />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                            {loading ? (
-                                <Loading />
-                            ) : error ? (
-                                <ErrorMessage message={error} />
-                            ) : (
-                                <>
-                                    <p className="truncate text-sm font-semibold text-white">
-                                        {profile?.displayName ?? 'Your Name'}
-                                    </p>
-                                    <p className="truncate text-xs text-slate-400">
-                                        @{profile?.username ?? 'yourhandle'}
-                                    </p>
-                                </>
-                            )}
-                        </div>
-
-                        <span
-                            aria-hidden
-                            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800/60 text-slate-400 transition-colors group-hover:text-white"
-                        >
-                            <span className="text-xl">{item.icon}</span>
-                            <span className="font-medium">{item.label}</span>
-                        </Link>
-                    );
-                })}
             </nav>
 
             {/* User Profile */}
@@ -212,6 +160,7 @@ export default function Sidebar() {
                     </div>
                 </div>
             </div>
+          </div>
         </aside>
     );
 }
