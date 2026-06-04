@@ -186,6 +186,13 @@ pnpm -C apps/web test
 pnpm -C apps/api test
 ```
 
+What these cover:
+
+- `pnpm lint` runs ESLint across the workspace.
+- `pnpm typecheck` runs TypeScript checks across the workspace.
+- `pnpm -C apps/web test` runs Jest tests for web hooks and client utilities.
+- `pnpm -C apps/api test` runs Node test suites for API routes and service helpers.
+
 ## Future Work
 
 - Build out the planned mobile version from the existing Expo scaffold so students can use UConnect naturally on iOS and Android.
