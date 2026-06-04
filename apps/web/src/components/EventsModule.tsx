@@ -157,7 +157,7 @@ type Props = {
     title?: string;
 };
 
-export default function EventsModule({ limit = 6, href = '/events', title = 'Upcoming Events' }: Props) {
+export default function EventsModule({ limit = 6, href, title = 'Upcoming Events' }: Props) {
     const { events, loading, error } = useUserEvents({ limit, includePublic: true });
 
     const [featured, ...rest] = events;

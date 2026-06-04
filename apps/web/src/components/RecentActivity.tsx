@@ -130,7 +130,7 @@ export default function RecentActivity({
     limit = 3,
     compact = false,
     showHeader = true,
-    href = '/activity',
+    href,
 }: Props) {
     const { items, loading, error } = useRecentActivity({ limit });
 

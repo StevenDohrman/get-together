@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import Loading from './Loading';
 import ErrorMessage from './ErrorMessage';
 import { useUserEvents, type UserEvent } from '@/lib/hooks/useUserEvents';
@@ -60,9 +59,6 @@ export default function EventsSidebar({ limit = 3 }: { limit?: number }) {
         <section>
             <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-white">Upcoming Events</h3>
-                <Link href="/events" className="text-xs text-purple-400 hover:text-purple-300">
-                    See all →
-                </Link>
             </div>
 
             {loading ? <Loading className="mt-2" /> : null}
