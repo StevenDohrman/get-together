@@ -30,26 +30,18 @@ function SensitiveValue({ value }: { value?: string | null }) {
   return (
     <span
       tabIndex={isKnown ? 0 : undefined}
-      className="group/sensitive relative inline-flex max-w-full cursor-default items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+      className="group inline-flex max-w-full cursor-default items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
       title={isKnown ? 'Hover or focus to reveal' : undefined}
     >
       <span
         className={
           isKnown
-            ? 'max-w-full select-none truncate blur-sm transition duration-150 group-hover/sensitive:blur-0 group-focus/sensitive:blur-0 group-focus-visible/sensitive:blur-0'
+            ? 'max-w-full select-none truncate blur-sm transition duration-150 group-hover:blur-none group-focus:blur-none group-focus-visible:blur-none'
             : 'max-w-full truncate'
         }
       >
         {displayValue}
       </span>
-      {isKnown ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 flex max-w-full items-center rounded-md bg-slate-950/95 pr-2 text-slate-400 transition-opacity duration-150 group-hover/sensitive:opacity-0 group-focus/sensitive:opacity-0 group-focus-visible/sensitive:opacity-0"
-        >
-          Hidden until hover
-        </span>
-      ) : null}
     </span>
   );
 }
