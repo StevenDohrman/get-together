@@ -14,6 +14,16 @@ Live site: https://uconnected.vercel.app
 - Use `/profile` to edit profile details, interests, location, and photos.
 - Use `/settings` to review account/session controls.
 
+## App Preview
+
+| Landing | Sign in |
+| --- | --- |
+| <img src="docs/screenshots/landing-preview.png" alt="UConnect landing page" width="420"> | <img src="docs/screenshots/auth-preview.png" alt="UConnect sign-in page" width="260"> |
+
+| Profile editing | Account settings |
+| --- | --- |
+| <img src="docs/screenshots/profile-preview.png" alt="UConnect profile editing page" width="420"> | <img src="docs/screenshots/settings-preview.png" alt="UConnect account settings page" width="420"> |
+
 ## Structure
 
 - `apps/web` - Next.js 16 App Router + React 19 + Tailwind CSS v4 web app
