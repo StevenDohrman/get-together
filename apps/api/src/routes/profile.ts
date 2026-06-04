@@ -6,6 +6,19 @@ import { requireAuthenticatedUser } from '../auth.js';
 import { requireAppUser } from '../requireAppUser.js';
 import { removeStorageObjectForUrl, validatePhotoUrl } from '../services/userPhotoStorage.js';
 
+type RouteLogger = {
+  log: {
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+  };
+};
+
+type ResolvedLocation = {
+  latitude: number;
+  longitude: number;
+  friendlyName: string;
+};
+
 export const MAX_PHOTOS_PER_USER = 6;
 const MAX_PHOTO_URL_LENGTH = 2048;
 
@@ -82,21 +95,39 @@ const geoLocationSchema = z
   })
   .nullable();
 
+const typedLocationSchema = z
+  .string()
+  .max(120, 'Location must be at most 120 characters')
+  .transform(s => {
+    const t = s.trim();
+    return t.length === 0 ? null : t;
+  })
+  .nullable();
+
 const patchProfileBody = z
   .object({
     username: z.union([usernameSchema, z.null()]).optional(),
     displayName: z.union([displayNameSchema, z.null()]).optional(),
     bio: z.union([bioSchema, z.null()]).optional(),
     geoLocation: geoLocationSchema.optional(),
+    typedLocation: typedLocationSchema.optional(),
   })
   .refine(
     data =>
       data.username !== undefined ||
       data.displayName !== undefined ||
       data.bio !== undefined ||
-      data.geoLocation !== undefined,
+      data.geoLocation !== undefined ||
+      data.typedLocation !== undefined,
     {
-      message: 'Provide at least one of username, displayName, bio, or geoLocation',
+      message: 'Provide at least one of username, displayName, bio, geoLocation, or typedLocation',
+    },
+  )
+  .refine(
+    data => !(data.geoLocation !== undefined && data.typedLocation !== undefined),
+    {
+      message: 'Provide either geoLocation or typedLocation, not both',
+      path: ['typedLocation'],
     },
   );
 
@@ -191,7 +222,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       });
     }
 
-    const { username, displayName, bio, geoLocation } = parsed.data;
+    const { username, displayName, bio, geoLocation, typedLocation } = parsed.data;
 
     try {
       let row = await resolveAppUser(authUser);
@@ -249,8 +280,9 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         });
       }
 
-      let cityName = 'Unknown';
+      let savedLocation = await readSavedLocation(row.id, req);
       if (geoLocation) {
+        let cityName = 'Unknown';
         try {
           cityName = await nearestCity(
             geoLocation.latitude,
@@ -259,27 +291,25 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         } catch (err) {
           req.log.warn(err, 'Failed to resolve nearest city');
         }
-
-        // Snap coordinates to a ~1.1 km grid (2 decimal places) BEFORE storing.
-        // This is a privacy mitigation: the precise device location is never
-        // persisted, so even an attacker with direct DB access can't recover
-        // it, and distance computations between any two users are quantized
-        // to the same grid. Combined with the API-side bucketing in
-        // `distanceBuckets.ts`, this defeats trilateration via Discover.
-        const snappedLat = snapCoordinate(geoLocation.latitude);
-        const snappedLng = snapCoordinate(geoLocation.longitude);
-
-        try {
-          await prisma.$executeRaw`
-            INSERT INTO "UserLocation" ("userId","location","friendlyName")
-            VALUES (${row.id}, ST_SetSRID(ST_MakePoint(${snappedLng}, ${snappedLat}), 4326), ${cityName})
-            ON CONFLICT ("userId") DO UPDATE
-            SET location = EXCLUDED.location,
-                "friendlyName" = EXCLUDED."friendlyName",
-                "updatedAt" = NOW()
-          `;
-        } catch (err) {
-          req.log.error(err, 'Failed to persist user location');
+        savedLocation = cityName;
+        await persistUserLocation(row.id, geoLocation.latitude, geoLocation.longitude, cityName, req);
+      } else if (typedLocation !== undefined) {
+        if (typedLocation === null) {
+          await clearUserLocation(row.id, req);
+          savedLocation = null;
+        } else {
+          const resolvedLocation = await geocodeTypedLocation(typedLocation);
+          if (!resolvedLocation) {
+            return reply.status(400).send({ error: 'Could not find that location' });
+          }
+          savedLocation = resolvedLocation.friendlyName;
+          await persistUserLocation(
+            row.id,
+            resolvedLocation.latitude,
+            resolvedLocation.longitude,
+            resolvedLocation.friendlyName,
+            req,
+          );
         }
       }
 
@@ -292,7 +322,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         username: row.username ?? null,
         displayName: row.displayName ?? null,
         bio: row.bio ?? null,
-        savedLocation: cityName,
+        savedLocation,
         photos,
       });
     } catch (e: unknown) {
@@ -445,6 +475,103 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
     const photos = await listUserPhotos(row.id);
     return reply.send({ photos });
   });
+}
+
+async function readSavedLocation(
+  userId: string,
+  req: RouteLogger,
+): Promise<string | null> {
+  try {
+    const r =
+      (await prisma.$queryRaw`SELECT "friendlyName" FROM "UserLocation" WHERE "userId" = ${userId} LIMIT 1`) as {
+        friendlyName: string | null;
+      }[];
+    return r?.[0]?.friendlyName ?? null;
+  } catch (err) {
+    req.log.warn(err, 'Failed to read saved location');
+    return null;
+  }
+}
+
+async function persistUserLocation(
+  userId: string,
+  latitude: number,
+  longitude: number,
+  friendlyName: string,
+  req: RouteLogger,
+): Promise<void> {
+  // Snap coordinates to a ~1.1 km grid (2 decimal places) BEFORE storing.
+  // This is a privacy mitigation: the precise device location is never
+  // persisted, so even an attacker with direct DB access can't recover it.
+  const snappedLat = snapCoordinate(latitude);
+  const snappedLng = snapCoordinate(longitude);
+
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "UserLocation" ("userId","location","friendlyName")
+      VALUES (${userId}, ST_SetSRID(ST_MakePoint(${snappedLng}, ${snappedLat}), 4326), ${friendlyName})
+      ON CONFLICT ("userId") DO UPDATE
+      SET location = EXCLUDED.location,
+          "friendlyName" = EXCLUDED."friendlyName",
+          "updatedAt" = NOW()
+    `;
+  } catch (err) {
+    req.log.error(err, 'Failed to persist user location');
+  }
+}
+
+async function clearUserLocation(
+  userId: string,
+  req: RouteLogger,
+): Promise<void> {
+  try {
+    await prisma.$executeRaw`DELETE FROM "UserLocation" WHERE "userId" = ${userId}`;
+  } catch (err) {
+    req.log.error(err, 'Failed to clear user location');
+  }
+}
+
+async function geocodeTypedLocation(query: string): Promise<ResolvedLocation | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(query)}`,
+      { headers: { 'User-Agent': 'uconnect-api' } },
+    );
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as Array<{
+      lat?: string;
+      lon?: string;
+      display_name?: string;
+      address?: {
+        city?: string;
+        town?: string;
+        village?: string;
+        suburb?: string;
+        county?: string;
+      };
+    }>;
+    const first = data[0];
+    if (!first?.lat || !first.lon) return null;
+
+    const latitude = Number(first.lat);
+    const longitude = Number(first.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+    const friendlyName =
+      first.address?.city ??
+      first.address?.town ??
+      first.address?.village ??
+      first.address?.suburb ??
+      first.address?.county ??
+      first.display_name?.split(',')[0]?.trim() ??
+      query;
+
+    return { latitude, longitude, friendlyName };
+  } catch {
+    return null;
+  }
 }
 
 /**
