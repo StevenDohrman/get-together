@@ -6,7 +6,9 @@ import DashboardLayout from './DashboardLayout';
 import DiscoverCard from './DiscoverCard';
 import ErrorMessage from './ErrorMessage';
 import Loading from './Loading';
+import { initialsFor, pickGradient } from '@/lib/avatarUtils';
 import { useDiscovery, type DiscoveryUser } from '@/lib/hooks/useDiscovery';
+import { useLikedUsers, type LikedUser } from '@/lib/hooks/useLikedUsers';
 import { useSwipes } from '@/lib/hooks/useSwipes';
 
 const MAX_DOTS = 5;
@@ -77,8 +79,127 @@ function CaughtUpEmpty({ onRefresh }: { onRefresh: () => void }) {
     );
 }
 
+function formatLikedDate(iso: string): string {
+    return new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+    }).format(new Date(iso));
+}
+
+function LikedPeoplePanel({
+    users,
+    loading,
+    error,
+    onRefresh,
+}: {
+    users: LikedUser[];
+    loading: boolean;
+    error: string | null;
+    onRefresh: () => void;
+}) {
+    return (
+        <section className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+            <div className="flex items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-white">Liked by you</h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                        People you swiped yes on.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-purple-400 hover:text-white"
+                    onClick={onRefresh}
+                    disabled={loading}
+                >
+                    Refresh
+                </button>
+            </div>
+
+            {error ? (
+                <div className="mt-4">
+                    <ErrorMessage message={error} />
+                </div>
+            ) : null}
+
+            {loading ? (
+                <div className="mt-6">
+                    <Loading />
+                </div>
+            ) : users.length === 0 ? (
+                <p className="mt-5 rounded-xl border border-dashed border-slate-700 px-4 py-5 text-sm text-slate-400">
+                    No liked people yet. Swipe yes on someone in Discover and they will appear here.
+                </p>
+            ) : (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {users.map((user) => {
+                        const name = user.displayName ?? user.username ?? 'Someone';
+                        const gradient = pickGradient(user.id);
+                        const interests = user.interests.slice(0, 3);
+
+                        return (
+                            <article
+                                key={user.id}
+                                className="flex gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3"
+                            >
+                                <div
+                                    className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br text-sm font-bold text-white ${gradient}`}
+                                >
+                                    {user.avatarUrl ? (
+                                        <div
+                                            aria-label={`${name} profile photo`}
+                                            role="img"
+                                            className="absolute inset-0 bg-cover bg-center"
+                                            style={{ backgroundImage: `url(${user.avatarUrl})` }}
+                                        />
+                                    ) : (
+                                        initialsFor(name)
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-semibold text-white">
+                                                {name}
+                                            </p>
+                                            <p className="truncate text-xs text-slate-500">
+                                                {user.username ? `@${user.username}` : 'No username set'}
+                                            </p>
+                                        </div>
+                                        <span className="shrink-0 text-[11px] text-slate-500">
+                                            {formatLikedDate(user.likedAt)}
+                                        </span>
+                                    </div>
+                                    {interests.length > 0 ? (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {interests.map((interest) => (
+                                                <span
+                                                    key={interest.id}
+                                                    className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300"
+                                                >
+                                                    {interest.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            )}
+        </section>
+    );
+}
+
 export default function DiscoverClient() {
     const { users, reason, loading, error, refetch } = useDiscovery({ initialLimit: 20 });
+    const {
+        users: likedUsers,
+        loading: likedLoading,
+        error: likedError,
+        refetch: refetchLiked,
+    } = useLikedUsers();
     const [visible, setVisible] = useState<DiscoveryUser[]>([]);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -96,6 +217,7 @@ export default function DiscoverClient() {
             setVisible(cur => cur.filter(u => u.id !== id));
             try {
                 await postSwipe(id, decision);
+                if (decision === 'YES') await refetchLiked();
             } catch (e) {
                 setVisible(previous);
                 setActionError(e instanceof Error ? e.message : 'Failed to record swipe');
@@ -103,7 +225,7 @@ export default function DiscoverClient() {
                 setBusyId(null);
             }
         },
-        [postSwipe, visible],
+        [postSwipe, refetchLiked, visible],
     );
 
     const topCard = visible[0];
@@ -152,6 +274,13 @@ export default function DiscoverClient() {
                         <DeckProgress index={0} total={visible.length} />
                     </div>
                 ) : null}
+
+                <LikedPeoplePanel
+                    users={likedUsers}
+                    loading={likedLoading}
+                    error={likedError}
+                    onRefresh={() => void refetchLiked()}
+                />
             </div>
         </DashboardLayout>
     );
