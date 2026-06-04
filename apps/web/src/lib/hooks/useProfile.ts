@@ -18,6 +18,10 @@ export type Profile = {
     savedLocation?: string | null;
 };
 
+function messageFromError(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
 export function useProfile() {
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -29,8 +33,8 @@ export function useProfile() {
         try {
             const data = await apiGet<Profile>('/profile');
             setProfile(data ?? null);
-        } catch (err: any) {
-            setError(err?.message ?? String(err));
+        } catch (err: unknown) {
+            setError(messageFromError(err));
             setProfile(null);
         } finally {
             setLoading(false);
