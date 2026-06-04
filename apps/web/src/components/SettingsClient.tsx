@@ -23,6 +23,37 @@ function formatDate(value?: string | null): string {
   }).format(date);
 }
 
+function SensitiveValue({ value }: { value?: string | null }) {
+  const displayValue = value ?? 'Unknown';
+  const isKnown = displayValue !== 'Unknown';
+
+  return (
+    <span
+      tabIndex={isKnown ? 0 : undefined}
+      className="group/sensitive relative inline-flex max-w-full cursor-default items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+      title={isKnown ? 'Hover or focus to reveal' : undefined}
+    >
+      <span
+        className={
+          isKnown
+            ? 'max-w-full select-none truncate blur-sm transition duration-150 group-hover/sensitive:blur-0 group-focus/sensitive:blur-0 group-focus-visible/sensitive:blur-0'
+            : 'max-w-full truncate'
+        }
+      >
+        {displayValue}
+      </span>
+      {isKnown ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 flex max-w-full items-center rounded-md bg-slate-950/95 pr-2 text-slate-400 transition-opacity duration-150 group-hover/sensitive:opacity-0 group-focus/sensitive:opacity-0 group-focus-visible/sensitive:opacity-0"
+        >
+          Hidden until hover
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export default function SettingsClient() {
   const { profile, loading, error, refetch } = useProfile();
   const [status, setStatus] = useState<string | null>(null);
@@ -131,7 +162,7 @@ export default function SettingsClient() {
                     Email
                   </dt>
                   <dd className="mt-2 truncate text-sm font-medium text-white">
-                    {profile?.email ?? 'Unknown'}
+                    <SensitiveValue value={profile?.email} />
                   </dd>
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
@@ -147,7 +178,7 @@ export default function SettingsClient() {
                     Profile id
                   </dt>
                   <dd className="mt-2 truncate text-sm font-medium text-white">
-                    {profile?.appUserId ?? 'Unknown'}
+                    <SensitiveValue value={profile?.appUserId} />
                   </dd>
                 </div>
               </dl>
