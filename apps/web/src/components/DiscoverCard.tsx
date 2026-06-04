@@ -56,11 +56,16 @@ export default function DiscoverCard({ user, disabled = false, onSwipe }: Props)
         >
             <div className={`relative aspect-[4/5] w-full bg-gradient-to-br ${gradient}`}>
                 {user.avatarUrl ? (
-                    <img
-                        src={user.avatarUrl}
-                        alt={displayName}
-                        className="absolute inset-0 h-full w-full object-cover"
-                    />
+                    <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={user.avatarUrl}
+                            alt={displayName}
+                            loading="lazy"
+                            decoding="async"
+                            className="absolute inset-0 h-full w-full object-cover"
+                        />
+                    </>
                 ) : (
                     <div className="flex h-full w-full items-center justify-center">
                         <span
@@ -107,11 +112,10 @@ export default function DiscoverCard({ user, disabled = false, onSwipe }: Props)
                                 return (
                                     <span
                                         key={interest.id}
-                                        className={`rounded-full px-3 py-1 text-xs font-medium ${
-                                            isShared
+                                        className={`rounded-full px-3 py-1 text-xs font-medium ${isShared
                                                 ? 'bg-purple-500/90 text-white'
                                                 : 'bg-white/15 text-white/90 backdrop-blur'
-                                        }`}
+                                            }`}
                                         title={isShared ? 'Shared interest' : undefined}
                                     >
                                         {interest.name}
