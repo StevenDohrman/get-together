@@ -46,6 +46,13 @@ type RenameChatResponse = {
   };
 };
 
+type ChatSeenMember = {
+  user: { id: string; username: string | null; displayName: string | null };
+  lastSeenAt: string | null;
+};
+
+type SeenResponse = { members: ChatSeenMember[] };
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: 'numeric',
@@ -115,6 +122,23 @@ function mergeMessages(
   );
 }
 
+function displayNameFor(user: ChatSeenMember['user']): string {
+  return user.displayName ?? user.username ?? 'Someone';
+}
+
+function formatSeenNames(members: ChatSeenMember[]): string | null {
+  if (members.length === 0) return null;
+  if (members.length === 1) return `Seen by ${displayNameFor(members[0].user)}`;
+  if (members.length === 2) {
+    return `Seen by ${displayNameFor(members[0].user)} and ${displayNameFor(
+      members[1].user,
+    )}`;
+  }
+  return `Seen by ${displayNameFor(members[0].user)} and ${
+    members.length - 1
+  } others`;
+}
+
 function Avatar({
   name,
   seed,
@@ -180,8 +204,10 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
+  const [seenMembers, setSeenMembers] = useState<ChatSeenMember[]>([]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
+  const seenMarkRef = useRef<string | null>(null);
 
   const groupName = chat?.group?.name ?? groupSlug;
   const canRename = !!chat?.group;
@@ -245,6 +271,14 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     setMessages((cur) => mergeMessages(cur, fresh));
   }, []);
 
+  const markChatSeen = useCallback(async (chatId: string): Promise<void> => {
+    const res = await apiJson<SeenResponse>(
+      `/me/chats/${chatId}/seen`,
+      'PATCH',
+    );
+    setSeenMembers(res.members ?? []);
+  }, []);
+
   const {
     connected: realtimeConnected,
     isConnecting,
@@ -283,6 +317,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
         throw new Error('Chat not found for this group (are you a member?)');
       }
       setChat(found);
+      setSeenMembers([]);
 
       await backfill(found.id);
     } catch (e) {
@@ -302,6 +337,19 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     if (!listRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!chat) return;
+    const lastMessageId = messages[messages.length - 1]?.id ?? 'empty';
+    const markKey = `${chat.id}:${lastMessageId}`;
+    if (seenMarkRef.current === markKey) return;
+    seenMarkRef.current = markKey;
+
+    void markChatSeen(chat.id).catch((err) => {
+      console.error('Failed to mark chat seen:', err);
+      seenMarkRef.current = null;
+    });
+  }, [chat, markChatSeen, messages]);
 
   const canSend = useMemo(
     () => draft.trim().length > 0 && !sending && !!chat && realtimeConnected,
@@ -330,12 +378,15 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       setMessages((cur) =>
         cur.some((m) => m.id === message.id) ? cur : [...cur, message],
       );
+      void markChatSeen(chat.id).catch((err) => {
+        console.error('Failed to mark sent message seen:', err);
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
-  }, [chat, draft, sendChatMessage]);
+  }, [chat, draft, markChatSeen, sendChatMessage]);
 
   const handleEventCreated = useCallback((message: ChatMessage) => {
     setMessages((cur) =>
@@ -563,6 +614,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                   <MessageList
                     messages={messages}
                     appUserId={appUserId}
+                    seenMembers={seenMembers}
                     onEventUpdated={handleEventUpdated}
                   />
                 )}
@@ -644,16 +696,27 @@ export default function GroupChatClient(props: { groupSlug: string }) {
 function MessageList({
   messages,
   appUserId,
+  seenMembers,
   onEventUpdated,
 }: {
   messages: ChatMessage[];
   appUserId: string | null;
+  seenMembers: ChatSeenMember[];
   onEventUpdated: (next: EventMessagePayload) => void;
 }) {
   const items: ReactElement[] = [];
   let lastDayKey: string | null = null;
   let lastSenderId: string | null = null;
   let lastTimestamp = 0;
+  const latestOwnTextMessageId =
+    appUserId === null
+      ? null
+      : [...messages]
+          .reverse()
+          .find(
+            (m) =>
+              m.type === ChatMessageType.TEXT && m.sender.id === appUserId,
+          )?.id ?? null;
 
   for (let i = 0; i < messages.length; i += 1) {
     const m = messages[i];
@@ -713,6 +776,18 @@ function MessageList({
       m.sender.displayName ?? m.sender.username ?? 'Unknown';
     const isMe = appUserId !== null && m.sender.id === appUserId;
     const showHeader = !sameSender;
+    const seenLabel =
+      isMe && m.id === latestOwnTextMessageId
+        ? formatSeenNames(
+            seenMembers.filter(
+              (member) =>
+                member.user.id !== appUserId &&
+                member.lastSeenAt !== null &&
+                new Date(member.lastSeenAt).getTime() >=
+                  new Date(m.createdAt).getTime(),
+            ),
+          )
+        : null;
 
     items.push(
       <div
@@ -756,6 +831,11 @@ function MessageList({
               {formatTime(m.createdAt)}
             </span>
           </div>
+          {seenLabel ? (
+            <p className="mt-1 px-1 text-[10px] font-medium text-slate-500">
+              {seenLabel}
+            </p>
+          ) : null}
         </div>
       </div>,
     );

@@ -36,6 +36,17 @@ const renameChatBody = z.object({
   name: z.string().trim().min(1).max(80),
 });
 
+async function getChatSeenMembers(chatId: string) {
+  return prisma.groupChatMember.findMany({
+    where: { chatId },
+    orderBy: { joinedAt: 'asc' },
+    select: {
+      lastSeenAt: true,
+      user: { select: { id: true, username: true, displayName: true } },
+    },
+  });
+}
+
 /**
  * Two accepted shapes:
  *  1. `{ messageType, payload }` — preferred; matches the wire `ChatMessage`
@@ -232,6 +243,36 @@ export function registerChatsRoutes(
     });
 
     return reply.send({ chat: { id: chatId.data, group } });
+  });
+
+  app.patch('/me/chats/:chatId/seen', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const chatId = z
+      .string()
+      .uuid()
+      .safeParse((req.params as { chatId?: string }).chatId);
+    if (!chatId.success)
+      return reply.status(400).send({ error: 'Invalid chatId' });
+
+    if (!(await isChatMember(chatId.data, row.id))) {
+      return reply.status(403).send({ error: 'Not a chat member' });
+    }
+
+    await prisma.groupChatMember.update({
+      where: { chatId_userId: { chatId: chatId.data, userId: row.id } },
+      data: { lastSeenAt: new Date() },
+    });
+
+    const members = await getChatSeenMembers(chatId.data);
+
+    return reply.send({
+      members: members.map((member) => ({
+        user: member.user,
+        lastSeenAt: member.lastSeenAt?.toISOString() ?? null,
+      })),
+    });
   });
 
   app.post('/me/chats/:chatId/messages', async (req, reply) => {
