@@ -205,6 +205,7 @@ model GroupChatMember {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   joinedAt DateTime @default(now())
+  lastSeenAt DateTime?
 
   @@id([chatId, userId])
   @@index([userId])

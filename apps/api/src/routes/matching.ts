@@ -78,6 +78,57 @@ export function registerMatchingRoutes(app: FastifyInstance, deps: MatchingRoute
     return reply.send(result);
   });
 
+  app.get('/matching/liked', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const swipes = await prisma.userSwipe.findMany({
+      where: { swiperId: row.id, decision: SwipeDecision.YES },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        target: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            photos: {
+              orderBy: { position: 'asc' },
+              select: { id: true, url: true, position: true },
+            },
+            interests: {
+              include: {
+                interest: { select: { id: true, slug: true, name: true } },
+              },
+              orderBy: [{ weight: 'desc' }, { interest: { name: 'asc' } }],
+            },
+          },
+        },
+      },
+    });
+
+    return reply.send({
+      users: swipes.map((swipe) => {
+        const photos = swipe.target.photos;
+        return {
+          id: swipe.target.id,
+          username: swipe.target.username,
+          displayName: swipe.target.displayName,
+          bio: swipe.target.bio,
+          avatarUrl: photos[0]?.url ?? null,
+          photos,
+          likedAt: swipe.updatedAt.toISOString(),
+          interests: swipe.target.interests.map((row) => ({
+            id: row.interest.id,
+            slug: row.interest.slug,
+            name: row.interest.name,
+            weight: row.weight,
+          })),
+        };
+      }),
+    });
+  });
+
   app.post('/matching/swipes', async (req, reply) => {
     const row = await requireAppUser(req, reply, supabaseAdmin);
     if (!row) return;

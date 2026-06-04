@@ -2,7 +2,7 @@
 
 import CreateEventDialog from '@/components/chat/CreateEventDialog';
 import EventMessageCard from '@/components/chat/EventMessageCard';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiJson } from '@/lib/api';
 import {
   ChatMessageType,
   useChatRealtime,
@@ -38,6 +38,30 @@ type ChatsResponse = { chats: ChatSummary[] };
 type MessagesResponse = { messages: ChatMessage[] };
 
 type ProfileResponse = { appUserId: string | null };
+
+type RenameChatResponse = {
+  chat: {
+    id: string;
+    group: { id: string; slug: string; name: string };
+  };
+};
+
+type ChatSeenMember = {
+  user: { id: string; username: string | null; displayName: string | null };
+  lastSeenAt: string | null;
+};
+
+type SeenResponse = { members: ChatSeenMember[] };
+
+type ChatMemberProfile = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  bio: string | null;
+  photos: { id: string; url: string; position: number }[];
+};
+
+type ChatMemberProfileResponse = { profile: ChatMemberProfile };
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
@@ -108,6 +132,23 @@ function mergeMessages(
   );
 }
 
+function displayNameFor(user: ChatSeenMember['user']): string {
+  return user.displayName ?? user.username ?? 'Someone';
+}
+
+function formatSeenNames(members: ChatSeenMember[]): string | null {
+  if (members.length === 0) return null;
+  if (members.length === 1) return `Seen by ${displayNameFor(members[0].user)}`;
+  if (members.length === 2) {
+    return `Seen by ${displayNameFor(members[0].user)} and ${displayNameFor(
+      members[1].user,
+    )}`;
+  }
+  return `Seen by ${displayNameFor(members[0].user)} and ${
+    members.length - 1
+  } others`;
+}
+
 function Avatar({
   name,
   seed,
@@ -157,6 +198,93 @@ function StatusPill({
   );
 }
 
+function MemberProfileModal({
+  profile,
+  loading,
+  error,
+  onClose,
+}: {
+  profile: ChatMemberProfile | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const displayName =
+    profile?.displayName ?? profile?.username ?? (loading ? 'Loading profile' : 'Profile');
+  const handle = profile?.username ? `@${profile.username}` : 'No username set';
+  const primaryPhoto = profile?.photos[0]?.url ?? null;
+  const gradient = pickGradient(profile?.id ?? displayName);
+  const initials = initialsFor(displayName);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chat-member-profile-title"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+          <h2 id="chat-member-profile-title" className="text-base font-semibold text-white">
+            Profile
+          </h2>
+          <button
+            type="button"
+            className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="p-5">
+          {loading ? (
+            <Loading />
+          ) : error ? (
+            <ErrorMessage message={error} />
+          ) : profile ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br text-xl font-bold text-white shadow-lg ${gradient}`}
+                >
+                  {primaryPhoto ? (
+                    <div
+                      aria-label={`${displayName} profile photo`}
+                      role="img"
+                      className="absolute inset-0 bg-cover bg-center"
+                      style={{ backgroundImage: `url(${primaryPhoto})` }}
+                    />
+                  ) : (
+                    initials
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-bold text-white">{displayName}</p>
+                  <p className="mt-1 truncate text-sm text-slate-400">{handle}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Bio
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                  {profile.bio?.trim() || 'No bio yet.'}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GroupChatClient(props: { groupSlug: string }) {
   const { groupSlug } = props;
 
@@ -170,10 +298,20 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const [appUserId, setAppUserId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [seenMembers, setSeenMembers] = useState<ChatSeenMember[]>([]);
+  const [memberProfile, setMemberProfile] = useState<ChatMemberProfile | null>(null);
+  const [memberProfileLoading, setMemberProfileLoading] = useState(false);
+  const [memberProfileError, setMemberProfileError] = useState<string | null>(null);
+  const [memberProfileOpen, setMemberProfileOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
+  const seenMarkRef = useRef<string | null>(null);
 
   const groupName = chat?.group?.name ?? groupSlug;
+  const canRename = !!chat?.group;
 
   // Get the current session's access token. The realtime hook needs it to
   // authenticate the broadcast subscription against the channel-auth RLS.
@@ -234,6 +372,14 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     setMessages((cur) => mergeMessages(cur, fresh));
   }, []);
 
+  const markChatSeen = useCallback(async (chatId: string): Promise<void> => {
+    const res = await apiJson<SeenResponse>(
+      `/me/chats/${chatId}/seen`,
+      'PATCH',
+    );
+    setSeenMembers(res.members ?? []);
+  }, []);
+
   const {
     connected: realtimeConnected,
     isConnecting,
@@ -272,6 +418,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
         throw new Error('Chat not found for this group (are you a member?)');
       }
       setChat(found);
+      setSeenMembers([]);
 
       await backfill(found.id);
     } catch (e) {
@@ -291,6 +438,19 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     if (!listRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!chat) return;
+    const lastMessageId = messages[messages.length - 1]?.id ?? 'empty';
+    const markKey = `${chat.id}:${lastMessageId}`;
+    if (seenMarkRef.current === markKey) return;
+    seenMarkRef.current = markKey;
+
+    void markChatSeen(chat.id).catch((err) => {
+      console.error('Failed to mark chat seen:', err);
+      seenMarkRef.current = null;
+    });
+  }, [chat, markChatSeen, messages]);
 
   const canSend = useMemo(
     () => draft.trim().length > 0 && !sending && !!chat && realtimeConnected,
@@ -319,12 +479,15 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       setMessages((cur) =>
         cur.some((m) => m.id === message.id) ? cur : [...cur, message],
       );
+      void markChatSeen(chat.id).catch((err) => {
+        console.error('Failed to mark sent message seen:', err);
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
-  }, [chat, draft, sendChatMessage]);
+  }, [chat, draft, markChatSeen, sendChatMessage]);
 
   const handleEventCreated = useCallback((message: ChatMessage) => {
     setMessages((cur) =>
@@ -344,6 +507,72 @@ export default function GroupChatClient(props: { groupSlug: string }) {
       }
     },
     [canSend, send],
+  );
+
+  const startRenaming = useCallback(() => {
+    setRenameDraft(groupName);
+    setRenaming(true);
+    setError(null);
+  }, [groupName]);
+
+  const cancelRenaming = useCallback(() => {
+    setRenameDraft('');
+    setRenaming(false);
+  }, []);
+
+  const saveRename = useCallback(async () => {
+    if (!chat?.group) return;
+
+    const nextName = renameDraft.trim();
+    if (!nextName) {
+      setError('Enter a group chat name before saving');
+      return;
+    }
+
+    setRenameSaving(true);
+    setError(null);
+
+    try {
+      const res = await apiJson<RenameChatResponse>(
+        `/me/chats/${chat.id}`,
+        'PATCH',
+        { name: nextName },
+      );
+      setChat((cur) =>
+        cur && cur.id === res.chat.id
+          ? { ...cur, group: res.chat.group }
+          : cur,
+      );
+      setRenaming(false);
+      setRenameDraft('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to rename chat');
+    } finally {
+      setRenameSaving(false);
+    }
+  }, [chat, renameDraft]);
+
+  const openMemberProfile = useCallback(
+    async (userId: string) => {
+      if (!chat) return;
+
+      setMemberProfileOpen(true);
+      setMemberProfile(null);
+      setMemberProfileError(null);
+      setMemberProfileLoading(true);
+
+      try {
+        const res = await apiGet<ChatMemberProfileResponse>(
+          `/me/chats/${chat.id}/members/${userId}/profile`,
+        );
+        setMemberProfile(res.profile);
+      } catch (e) {
+        setMemberProfileError(e instanceof Error ? e.message : 'Failed to load profile');
+      } finally {
+        setMemberProfileLoading(false);
+      }
+    },
+    [chat],
   );
 
   // Group avatar gradient (used for the hero icon).
@@ -380,9 +609,60 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                   <span className="mx-1.5 text-purple-200/60">/</span>
                   <span className="text-purple-100">{groupName}</span>
                 </p>
-                <h1 className="mt-1 truncate text-2xl font-bold tracking-tight md:text-3xl">
-                  {groupName}
-                </h1>
+                {renaming ? (
+                  <form
+                    className="mt-1 flex max-w-xl flex-col gap-2 sm:flex-row sm:items-center"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveRename();
+                    }}
+                  >
+                    <label className="sr-only" htmlFor="group-chat-name">
+                      Group chat name
+                    </label>
+                    <input
+                      id="group-chat-name"
+                      className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/15 px-3 py-2 text-xl font-bold tracking-tight text-white outline-none placeholder:text-purple-100/50 focus:border-white/60 focus:ring-2 focus:ring-white/20 md:text-2xl"
+                      value={renameDraft}
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      maxLength={80}
+                      disabled={renameSaving}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-purple-700 shadow-lg shadow-purple-900/20 transition-colors hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={renameSaving}
+                      >
+                        {renameSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={cancelRenaming}
+                        disabled={renameSaving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="mt-1 flex min-w-0 items-center gap-2">
+                    <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">
+                      {groupName}
+                    </h1>
+                    {canRename ? (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs font-semibold text-purple-50 transition-colors hover:bg-white/20"
+                        onClick={startRenaming}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </div>
+                )}
                 {chat ? (
                   <p className="mt-1 text-sm text-purple-100/90">
                     {chat.memberCount} member{chat.memberCount === 1 ? '' : 's'} · Group chat
@@ -458,6 +738,8 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                   <MessageList
                     messages={messages}
                     appUserId={appUserId}
+                    seenMembers={seenMembers}
+                    onOpenProfile={openMemberProfile}
                     onEventUpdated={handleEventUpdated}
                   />
                 )}
@@ -526,6 +808,15 @@ export default function GroupChatClient(props: { groupSlug: string }) {
           onCreated={handleEventCreated}
         />
       ) : null}
+
+      {memberProfileOpen ? (
+        <MemberProfileModal
+          profile={memberProfile}
+          loading={memberProfileLoading}
+          error={memberProfileError}
+          onClose={() => setMemberProfileOpen(false)}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }
@@ -539,16 +830,29 @@ export default function GroupChatClient(props: { groupSlug: string }) {
 function MessageList({
   messages,
   appUserId,
+  seenMembers,
+  onOpenProfile,
   onEventUpdated,
 }: {
   messages: ChatMessage[];
   appUserId: string | null;
+  seenMembers: ChatSeenMember[];
+  onOpenProfile: (userId: string) => void;
   onEventUpdated: (next: EventMessagePayload) => void;
 }) {
   const items: ReactElement[] = [];
   let lastDayKey: string | null = null;
   let lastSenderId: string | null = null;
   let lastTimestamp = 0;
+  const latestOwnTextMessageId =
+    appUserId === null
+      ? null
+      : [...messages]
+          .reverse()
+          .find(
+            (m) =>
+              m.type === ChatMessageType.TEXT && m.sender.id === appUserId,
+          )?.id ?? null;
 
   for (let i = 0; i < messages.length; i += 1) {
     const m = messages[i];
@@ -608,6 +912,18 @@ function MessageList({
       m.sender.displayName ?? m.sender.username ?? 'Unknown';
     const isMe = appUserId !== null && m.sender.id === appUserId;
     const showHeader = !sameSender;
+    const seenLabel =
+      isMe && m.id === latestOwnTextMessageId
+        ? formatSeenNames(
+            seenMembers.filter(
+              (member) =>
+                member.user.id !== appUserId &&
+                member.lastSeenAt !== null &&
+                new Date(member.lastSeenAt).getTime() >=
+                  new Date(m.createdAt).getTime(),
+            ),
+          )
+        : null;
 
     items.push(
       <div
@@ -618,7 +934,14 @@ function MessageList({
       >
         {!isMe ? (
           showHeader ? (
-            <Avatar name={senderName} seed={m.sender.id} size="sm" />
+            <button
+              type="button"
+              className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-purple-400"
+              onClick={() => onOpenProfile(m.sender.id)}
+              aria-label={`View ${senderName}'s profile`}
+            >
+              <Avatar name={senderName} seed={m.sender.id} size="sm" />
+            </button>
           ) : (
             <div className="w-7 shrink-0" aria-hidden />
           )
@@ -630,9 +953,13 @@ function MessageList({
           }`}
         >
           {showHeader && !isMe ? (
-            <p className="mb-1 px-1 text-xs font-semibold text-slate-300">
+            <button
+              type="button"
+              className="mb-1 rounded px-1 text-left text-xs font-semibold text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+              onClick={() => onOpenProfile(m.sender.id)}
+            >
               {senderName}
-            </p>
+            </button>
           ) : null}
 
           <div
@@ -651,6 +978,11 @@ function MessageList({
               {formatTime(m.createdAt)}
             </span>
           </div>
+          {seenLabel ? (
+            <p className="mt-1 px-1 text-[10px] font-medium text-slate-500">
+              {seenLabel}
+            </p>
+          ) : null}
         </div>
       </div>,
     );

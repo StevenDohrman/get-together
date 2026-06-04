@@ -23,6 +23,10 @@ export type ChatsRouteDeps = {
 };
 
 const limitQuery = z.coerce.number().int().min(1).max(100).default(50);
+const chatMemberProfileParams = z.object({
+  chatId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
 
 const textPayload = z.object({
   body: z.string().trim().min(1).max(2000),
@@ -31,6 +35,21 @@ const textPayload = z.object({
 const systemPayload = z.object({
   body: z.string().trim().min(1).max(2000),
 });
+
+const renameChatBody = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
+async function getChatSeenMembers(chatId: string) {
+  return prisma.groupChatMember.findMany({
+    where: { chatId },
+    orderBy: { joinedAt: 'asc' },
+    select: {
+      lastSeenAt: true,
+      user: { select: { id: true, username: true, displayName: true } },
+    },
+  });
+}
 
 /**
  * Two accepted shapes:
@@ -181,6 +200,123 @@ export function registerChatsRoutes(
     });
 
     return reply.send({ messages: items });
+  });
+
+  app.patch('/me/chats/:chatId', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const chatId = z
+      .string()
+      .uuid()
+      .safeParse((req.params as { chatId?: string }).chatId);
+    if (!chatId.success)
+      return reply.status(400).send({ error: 'Invalid chatId' });
+
+    if (!(await isChatMember(chatId.data, row.id))) {
+      return reply.status(403).send({ error: 'Not a chat member' });
+    }
+
+    const parsed = renameChatBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: 'Invalid body',
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+
+    const chat = await prisma.groupChat.findUnique({
+      where: { id: chatId.data },
+      select: { groupId: true },
+    });
+
+    if (!chat) {
+      return reply.status(404).send({ error: 'Chat not found' });
+    }
+
+    if (!chat.groupId) {
+      return reply
+        .status(400)
+        .send({ error: 'Only formed group chats can be renamed' });
+    }
+
+    const group = await prisma.group.update({
+      where: { id: chat.groupId },
+      data: { name: parsed.data.name },
+      select: { id: true, slug: true, name: true },
+    });
+
+    return reply.send({ chat: { id: chatId.data, group } });
+  });
+
+  app.patch('/me/chats/:chatId/seen', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const chatId = z
+      .string()
+      .uuid()
+      .safeParse((req.params as { chatId?: string }).chatId);
+    if (!chatId.success)
+      return reply.status(400).send({ error: 'Invalid chatId' });
+
+    if (!(await isChatMember(chatId.data, row.id))) {
+      return reply.status(403).send({ error: 'Not a chat member' });
+    }
+
+    await prisma.groupChatMember.update({
+      where: { chatId_userId: { chatId: chatId.data, userId: row.id } },
+      data: { lastSeenAt: new Date() },
+    });
+
+    const members = await getChatSeenMembers(chatId.data);
+
+    return reply.send({
+      members: members.map((member) => ({
+        user: member.user,
+        lastSeenAt: member.lastSeenAt?.toISOString() ?? null,
+      })),
+    });
+  });
+
+  app.get('/me/chats/:chatId/members/:userId/profile', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const params = chatMemberProfileParams.safeParse(req.params);
+    if (!params.success) {
+      return reply.status(400).send({ error: 'Invalid chat member profile params' });
+    }
+
+    const { chatId, userId } = params.data;
+
+    if (!(await isChatMember(chatId, row.id))) {
+      return reply.status(403).send({ error: 'Not a chat member' });
+    }
+
+    if (!(await isChatMember(chatId, userId))) {
+      return reply.status(404).send({ error: 'Chat member not found' });
+    }
+
+    const profile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        bio: true,
+        photos: {
+          orderBy: { position: 'asc' },
+          select: { id: true, url: true, position: true },
+        },
+      },
+    });
+
+    if (!profile) {
+      return reply.status(404).send({ error: 'Profile not found' });
+    }
+
+    return reply.send({ profile });
   });
 
   app.post('/me/chats/:chatId/messages', async (req, reply) => {
