@@ -4,6 +4,26 @@ UConnect is a UW-focused social matching platform for helping students form smal
 
 Live site: https://uconnected.vercel.app
 
+## Reviewer Quickstart
+
+- Live app: https://uconnected.vercel.app
+- Start at `/` for the landing page and project overview.
+- Use `/auth` to sign in or create an account.
+- Try `/discover` to review match cards and swipe on compatible people.
+- Try `/groups` to open group chats and planning spaces.
+- Use `/profile` to edit profile details, interests, location, and photos.
+- Use `/settings` to review account/session controls.
+
+## App Preview
+
+| Landing | Sign in |
+| --- | --- |
+| <img src="docs/screenshots/landing-preview.png" alt="UConnect landing page" width="420"> | <img src="docs/screenshots/auth-preview.png" alt="UConnect sign-in page" width="260"> |
+
+| Profile editing | Account settings |
+| --- | --- |
+| <img src="docs/screenshots/profile-preview.png" alt="UConnect profile editing page" width="420"> | <img src="docs/screenshots/settings-preview.png" alt="UConnect account settings page" width="420"> |
+
 ## Structure
 
 - `apps/web` - Next.js 16 App Router + React 19 + Tailwind CSS v4 web app
@@ -165,6 +185,13 @@ pnpm typecheck
 pnpm -C apps/web test
 pnpm -C apps/api test
 ```
+
+What these cover:
+
+- `pnpm lint` runs ESLint across the workspace.
+- `pnpm typecheck` runs TypeScript checks across the workspace.
+- `pnpm -C apps/web test` runs Jest tests for web hooks and client utilities.
+- `pnpm -C apps/api test` runs Node test suites for API routes and service helpers.
 
 ## Future Work
 
