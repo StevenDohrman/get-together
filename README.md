@@ -2,6 +2,8 @@
 
 UConnect is a UW-focused social matching platform for helping students form small groups around shared interests, activities, events, and mutual intent. The current product surface is the Next.js web app, backed by a Fastify API, Supabase Auth/Realtime/Storage, Prisma, PostgreSQL, and pgvector. An Expo mobile app scaffold is included and planned for a fuller future release.
 
+Live site: https://uconnected.vercel.app
+
 ## Structure
 
 - `apps/web` - Next.js 16 App Router + React 19 + Tailwind CSS v4 web app
