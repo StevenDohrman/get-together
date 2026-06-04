@@ -53,6 +53,16 @@ type ChatSeenMember = {
 
 type SeenResponse = { members: ChatSeenMember[] };
 
+type ChatMemberProfile = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  bio: string | null;
+  photos: { id: string; url: string; position: number }[];
+};
+
+type ChatMemberProfileResponse = { profile: ChatMemberProfile };
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: 'numeric',
@@ -188,6 +198,93 @@ function StatusPill({
   );
 }
 
+function MemberProfileModal({
+  profile,
+  loading,
+  error,
+  onClose,
+}: {
+  profile: ChatMemberProfile | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const displayName =
+    profile?.displayName ?? profile?.username ?? (loading ? 'Loading profile' : 'Profile');
+  const handle = profile?.username ? `@${profile.username}` : 'No username set';
+  const primaryPhoto = profile?.photos[0]?.url ?? null;
+  const gradient = pickGradient(profile?.id ?? displayName);
+  const initials = initialsFor(displayName);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chat-member-profile-title"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+          <h2 id="chat-member-profile-title" className="text-base font-semibold text-white">
+            Profile
+          </h2>
+          <button
+            type="button"
+            className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="p-5">
+          {loading ? (
+            <Loading />
+          ) : error ? (
+            <ErrorMessage message={error} />
+          ) : profile ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br text-xl font-bold text-white shadow-lg ${gradient}`}
+                >
+                  {primaryPhoto ? (
+                    <div
+                      aria-label={`${displayName} profile photo`}
+                      role="img"
+                      className="absolute inset-0 bg-cover bg-center"
+                      style={{ backgroundImage: `url(${primaryPhoto})` }}
+                    />
+                  ) : (
+                    initials
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-bold text-white">{displayName}</p>
+                  <p className="mt-1 truncate text-sm text-slate-400">{handle}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Bio
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                  {profile.bio?.trim() || 'No bio yet.'}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GroupChatClient(props: { groupSlug: string }) {
   const { groupSlug } = props;
 
@@ -205,6 +302,10 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const [renameDraft, setRenameDraft] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
   const [seenMembers, setSeenMembers] = useState<ChatSeenMember[]>([]);
+  const [memberProfile, setMemberProfile] = useState<ChatMemberProfile | null>(null);
+  const [memberProfileLoading, setMemberProfileLoading] = useState(false);
+  const [memberProfileError, setMemberProfileError] = useState<string | null>(null);
+  const [memberProfileOpen, setMemberProfileOpen] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const seenMarkRef = useRef<string | null>(null);
@@ -451,6 +552,29 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     }
   }, [chat, renameDraft]);
 
+  const openMemberProfile = useCallback(
+    async (userId: string) => {
+      if (!chat) return;
+
+      setMemberProfileOpen(true);
+      setMemberProfile(null);
+      setMemberProfileError(null);
+      setMemberProfileLoading(true);
+
+      try {
+        const res = await apiGet<ChatMemberProfileResponse>(
+          `/me/chats/${chat.id}/members/${userId}/profile`,
+        );
+        setMemberProfile(res.profile);
+      } catch (e) {
+        setMemberProfileError(e instanceof Error ? e.message : 'Failed to load profile');
+      } finally {
+        setMemberProfileLoading(false);
+      }
+    },
+    [chat],
+  );
+
   // Group avatar gradient (used for the hero icon).
   const heroGradient = useMemo(
     () => pickGradient(chat?.group?.id ?? groupSlug),
@@ -615,6 +739,7 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                     messages={messages}
                     appUserId={appUserId}
                     seenMembers={seenMembers}
+                    onOpenProfile={openMemberProfile}
                     onEventUpdated={handleEventUpdated}
                   />
                 )}
@@ -683,6 +808,15 @@ export default function GroupChatClient(props: { groupSlug: string }) {
           onCreated={handleEventCreated}
         />
       ) : null}
+
+      {memberProfileOpen ? (
+        <MemberProfileModal
+          profile={memberProfile}
+          loading={memberProfileLoading}
+          error={memberProfileError}
+          onClose={() => setMemberProfileOpen(false)}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }
@@ -697,11 +831,13 @@ function MessageList({
   messages,
   appUserId,
   seenMembers,
+  onOpenProfile,
   onEventUpdated,
 }: {
   messages: ChatMessage[];
   appUserId: string | null;
   seenMembers: ChatSeenMember[];
+  onOpenProfile: (userId: string) => void;
   onEventUpdated: (next: EventMessagePayload) => void;
 }) {
   const items: ReactElement[] = [];
@@ -798,7 +934,14 @@ function MessageList({
       >
         {!isMe ? (
           showHeader ? (
-            <Avatar name={senderName} seed={m.sender.id} size="sm" />
+            <button
+              type="button"
+              className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-purple-400"
+              onClick={() => onOpenProfile(m.sender.id)}
+              aria-label={`View ${senderName}'s profile`}
+            >
+              <Avatar name={senderName} seed={m.sender.id} size="sm" />
+            </button>
           ) : (
             <div className="w-7 shrink-0" aria-hidden />
           )
@@ -810,9 +953,13 @@ function MessageList({
           }`}
         >
           {showHeader && !isMe ? (
-            <p className="mb-1 px-1 text-xs font-semibold text-slate-300">
+            <button
+              type="button"
+              className="mb-1 rounded px-1 text-left text-xs font-semibold text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+              onClick={() => onOpenProfile(m.sender.id)}
+            >
               {senderName}
-            </p>
+            </button>
           ) : null}
 
           <div

@@ -23,6 +23,10 @@ export type ChatsRouteDeps = {
 };
 
 const limitQuery = z.coerce.number().int().min(1).max(100).default(50);
+const chatMemberProfileParams = z.object({
+  chatId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
 
 const textPayload = z.object({
   body: z.string().trim().min(1).max(2000),
@@ -273,6 +277,46 @@ export function registerChatsRoutes(
         lastSeenAt: member.lastSeenAt?.toISOString() ?? null,
       })),
     });
+  });
+
+  app.get('/me/chats/:chatId/members/:userId/profile', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const params = chatMemberProfileParams.safeParse(req.params);
+    if (!params.success) {
+      return reply.status(400).send({ error: 'Invalid chat member profile params' });
+    }
+
+    const { chatId, userId } = params.data;
+
+    if (!(await isChatMember(chatId, row.id))) {
+      return reply.status(403).send({ error: 'Not a chat member' });
+    }
+
+    if (!(await isChatMember(chatId, userId))) {
+      return reply.status(404).send({ error: 'Chat member not found' });
+    }
+
+    const profile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        bio: true,
+        photos: {
+          orderBy: { position: 'asc' },
+          select: { id: true, url: true, position: true },
+        },
+      },
+    });
+
+    if (!profile) {
+      return reply.status(404).send({ error: 'Profile not found' });
+    }
+
+    return reply.send({ profile });
   });
 
   app.post('/me/chats/:chatId/messages', async (req, reply) => {
