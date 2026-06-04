@@ -2,7 +2,7 @@
 
 import CreateEventDialog from '@/components/chat/CreateEventDialog';
 import EventMessageCard from '@/components/chat/EventMessageCard';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiJson } from '@/lib/api';
 import {
   ChatMessageType,
   useChatRealtime,
@@ -38,6 +38,13 @@ type ChatsResponse = { chats: ChatSummary[] };
 type MessagesResponse = { messages: ChatMessage[] };
 
 type ProfileResponse = { appUserId: string | null };
+
+type RenameChatResponse = {
+  chat: {
+    id: string;
+    group: { id: string; slug: string; name: string };
+  };
+};
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
@@ -170,10 +177,14 @@ export default function GroupChatClient(props: { groupSlug: string }) {
   const [appUserId, setAppUserId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const groupName = chat?.group?.name ?? groupSlug;
+  const canRename = !!chat?.group;
 
   // Get the current session's access token. The realtime hook needs it to
   // authenticate the broadcast subscription against the channel-auth RLS.
@@ -346,6 +357,49 @@ export default function GroupChatClient(props: { groupSlug: string }) {
     [canSend, send],
   );
 
+  const startRenaming = useCallback(() => {
+    setRenameDraft(groupName);
+    setRenaming(true);
+    setError(null);
+  }, [groupName]);
+
+  const cancelRenaming = useCallback(() => {
+    setRenameDraft('');
+    setRenaming(false);
+  }, []);
+
+  const saveRename = useCallback(async () => {
+    if (!chat?.group) return;
+
+    const nextName = renameDraft.trim();
+    if (!nextName) {
+      setError('Enter a group chat name before saving');
+      return;
+    }
+
+    setRenameSaving(true);
+    setError(null);
+
+    try {
+      const res = await apiJson<RenameChatResponse>(
+        `/me/chats/${chat.id}`,
+        'PATCH',
+        { name: nextName },
+      );
+      setChat((cur) =>
+        cur && cur.id === res.chat.id
+          ? { ...cur, group: res.chat.group }
+          : cur,
+      );
+      setRenaming(false);
+      setRenameDraft('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to rename chat');
+    } finally {
+      setRenameSaving(false);
+    }
+  }, [chat, renameDraft]);
+
   // Group avatar gradient (used for the hero icon).
   const heroGradient = useMemo(
     () => pickGradient(chat?.group?.id ?? groupSlug),
@@ -380,9 +434,60 @@ export default function GroupChatClient(props: { groupSlug: string }) {
                   <span className="mx-1.5 text-purple-200/60">/</span>
                   <span className="text-purple-100">{groupName}</span>
                 </p>
-                <h1 className="mt-1 truncate text-2xl font-bold tracking-tight md:text-3xl">
-                  {groupName}
-                </h1>
+                {renaming ? (
+                  <form
+                    className="mt-1 flex max-w-xl flex-col gap-2 sm:flex-row sm:items-center"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveRename();
+                    }}
+                  >
+                    <label className="sr-only" htmlFor="group-chat-name">
+                      Group chat name
+                    </label>
+                    <input
+                      id="group-chat-name"
+                      className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/15 px-3 py-2 text-xl font-bold tracking-tight text-white outline-none placeholder:text-purple-100/50 focus:border-white/60 focus:ring-2 focus:ring-white/20 md:text-2xl"
+                      value={renameDraft}
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      maxLength={80}
+                      disabled={renameSaving}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-purple-700 shadow-lg shadow-purple-900/20 transition-colors hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={renameSaving}
+                      >
+                        {renameSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={cancelRenaming}
+                        disabled={renameSaving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="mt-1 flex min-w-0 items-center gap-2">
+                    <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">
+                      {groupName}
+                    </h1>
+                    {canRename ? (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs font-semibold text-purple-50 transition-colors hover:bg-white/20"
+                        onClick={startRenaming}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </div>
+                )}
                 {chat ? (
                   <p className="mt-1 text-sm text-purple-100/90">
                     {chat.memberCount} member{chat.memberCount === 1 ? '' : 's'} · Group chat

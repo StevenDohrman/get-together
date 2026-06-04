@@ -32,6 +32,10 @@ const systemPayload = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
+const renameChatBody = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
 /**
  * Two accepted shapes:
  *  1. `{ messageType, payload }` — preferred; matches the wire `ChatMessage`
@@ -181,6 +185,53 @@ export function registerChatsRoutes(
     });
 
     return reply.send({ messages: items });
+  });
+
+  app.patch('/me/chats/:chatId', async (req, reply) => {
+    const row = await requireAppUser(req, reply, supabaseAdmin);
+    if (!row) return;
+
+    const chatId = z
+      .string()
+      .uuid()
+      .safeParse((req.params as { chatId?: string }).chatId);
+    if (!chatId.success)
+      return reply.status(400).send({ error: 'Invalid chatId' });
+
+    if (!(await isChatMember(chatId.data, row.id))) {
+      return reply.status(403).send({ error: 'Not a chat member' });
+    }
+
+    const parsed = renameChatBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: 'Invalid body',
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+
+    const chat = await prisma.groupChat.findUnique({
+      where: { id: chatId.data },
+      select: { groupId: true },
+    });
+
+    if (!chat) {
+      return reply.status(404).send({ error: 'Chat not found' });
+    }
+
+    if (!chat.groupId) {
+      return reply
+        .status(400)
+        .send({ error: 'Only formed group chats can be renamed' });
+    }
+
+    const group = await prisma.group.update({
+      where: { id: chat.groupId },
+      data: { name: parsed.data.name },
+      select: { id: true, slug: true, name: true },
+    });
+
+    return reply.send({ chat: { id: chatId.data, group } });
   });
 
   app.post('/me/chats/:chatId/messages', async (req, reply) => {
