@@ -15,6 +15,10 @@ type SelectedInterestsResponse = { interests: SelectedInterest[] };
 
 const SAVE_DEBOUNCE = 700;
 
+function messageFromError(err: unknown, fallback: string): string {
+    return err instanceof Error ? err.message : fallback;
+}
+
 export function useInterests() {
     const [catalog, setCatalog] = useState<Interest[]>([]);
     const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>([]);
@@ -52,8 +56,8 @@ export function useInterests() {
             lastSavedState.current = JSON.stringify(sortedSaved.map(i => ({ id: i.id, weight: i.weight })));
             lastFailedState.current = '';
             hasHydrated.current = true;
-        } catch (e: any) {
-            setError(e?.message ?? 'Failed to load interests');
+        } catch (e: unknown) {
+            setError(messageFromError(e, 'Failed to load interests'));
             setCatalog([]);
             // Preserve previous selection if we already have one; avoid clearing
             // during failures since this hook auto-saves.

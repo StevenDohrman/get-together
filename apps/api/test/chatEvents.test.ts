@@ -10,8 +10,13 @@ const startsAt = new Date('2026-06-04T17:00:00.000Z');
 const endsAt = new Date('2026-06-04T18:30:00.000Z');
 const attendeeCreatedAt = new Date('2026-06-01T12:00:00.000Z');
 const messageCreatedAt = new Date('2026-06-02T08:30:00.000Z');
+const updatedAt = new Date('2026-06-02T09:00:00.000Z');
 
-const event = {
+type EventFixture = Parameters<typeof toEventPayload>[0];
+type MessageFixture = Parameters<typeof toChatMessage>[0];
+type ManageableEventFixture = Parameters<typeof canManageEvent>[0];
+
+const event: EventFixture = {
   id: 'event-1',
   title: 'Library study sprint',
   description: 'Bring notes from class.',
@@ -21,9 +26,10 @@ const event = {
   endsAt,
   createdById: 'user-1',
   groupId: 'group-1',
+  createdAt: attendeeCreatedAt,
+  updatedAt,
   attendees: [
     {
-      id: 'attendee-1',
       eventId: 'event-1',
       userId: 'user-1',
       status: 'GOING',
@@ -31,7 +37,6 @@ const event = {
       user: { id: 'user-1', username: 'alaris', displayName: 'Alaris' },
     },
     {
-      id: 'attendee-2',
       eventId: 'event-1',
       userId: 'user-2',
       status: 'MAYBE',
@@ -39,7 +44,7 @@ const event = {
       user: { id: 'user-2', username: null, displayName: 'Tristan' },
     },
   ],
-} as any;
+};
 
 describe('chat event wire helpers', () => {
   it('serializes event snapshots for chat payloads', () => {
@@ -95,10 +100,11 @@ describe('chat event wire helpers', () => {
         senderId: 'user-1',
         kind: 'EVENT',
         body: 'Proposed event: Library study sprint',
+        payload: null,
         eventId: 'event-1',
         createdAt: messageCreatedAt,
         sender: { id: 'user-1', username: 'alaris', displayName: 'Alaris' },
-      } as any,
+      } satisfies MessageFixture,
       event,
     );
 
@@ -111,8 +117,10 @@ describe('chat event wire helpers', () => {
   });
 
   it('checks event ownership and chat realtime topic formatting', () => {
-    assert.equal(canManageEvent({ createdById: 'user-1' } as any, 'user-1'), true);
-    assert.equal(canManageEvent({ createdById: 'user-1' } as any, 'user-2'), false);
+    const manageableEvent: ManageableEventFixture = { createdById: 'user-1' };
+
+    assert.equal(canManageEvent(manageableEvent, 'user-1'), true);
+    assert.equal(canManageEvent(manageableEvent, 'user-2'), false);
     assert.equal(chatBroadcastTopic('chat-abc'), 'chat:chat-abc');
   });
 });
