@@ -4,6 +4,16 @@ UConnect is a UW-focused social matching platform for helping students form smal
 
 Live site: https://uconnected.vercel.app
 
+## Reviewer Quickstart
+
+- Live app: https://uconnected.vercel.app
+- Start at `/` for the landing page and project overview.
+- Use `/auth` to sign in or create an account.
+- Try `/discover` to review match cards and swipe on compatible people.
+- Try `/groups` to open group chats and planning spaces.
+- Use `/profile` to edit profile details, interests, location, and photos.
+- Use `/settings` to review account/session controls.
+
 ## Structure
 
 - `apps/web` - Next.js 16 App Router + React 19 + Tailwind CSS v4 web app
