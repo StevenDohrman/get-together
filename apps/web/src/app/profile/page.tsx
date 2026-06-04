@@ -111,6 +111,7 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [locationName, setLocationName] = useState('');
+  const [locationDraft, setLocationDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const {
     photos,
@@ -240,6 +241,7 @@ export default function ProfilePage() {
         setDisplayName(parsed.displayName ?? '');
         setBio(parsed.bio ?? '');
         setLocationName(parsed.savedLocation ?? '');
+        setLocationDraft(parsed.savedLocation ?? '');
         setLoading(false);
         void refetchInterests();
       } catch (e) {
@@ -257,7 +259,10 @@ export default function ProfilePage() {
     };
   }, [getSupabase, refetchInterests]);
 
-  async function saveProfile(nextGeoLocation?: GeolocationCoordinates | null) {
+  async function saveProfile(options: {
+    geoLocation?: GeolocationCoordinates | null;
+    typedLocation?: string | null;
+  } = {}) {
     setError(null);
     setInfo(null);
 
@@ -298,14 +303,18 @@ export default function ProfilePage() {
         displayName: string | null;
         bio: string | null;
         geoLocation?: GeolocationCoordinates | null;
+        typedLocation?: string | null;
       } = {
         username: nextUsername.length === 0 ? null : nextUsername,
         displayName: nextDisplay.length === 0 ? null : nextDisplay,
         bio: nextBio.length === 0 ? null : nextBio,
       };
 
-      if (nextGeoLocation !== undefined) {
-        payload.geoLocation = nextGeoLocation;
+      if (options.geoLocation !== undefined) {
+        payload.geoLocation = options.geoLocation;
+      }
+      if (options.typedLocation !== undefined) {
+        payload.typedLocation = options.typedLocation;
       }
 
       const updated = parseProfile(
@@ -317,6 +326,7 @@ export default function ProfilePage() {
       setDisplayName(updated.displayName ?? '');
       setBio(updated.bio ?? '');
       setLocationName(updated.savedLocation ?? '');
+      setLocationDraft(updated.savedLocation ?? '');
 
       await getSupabase().auth.refreshSession();
 
@@ -581,19 +591,38 @@ export default function ProfilePage() {
               >
                 Location
               </label>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <div className="flex h-12 flex-1 items-center rounded-xl border border-slate-700 bg-slate-900 px-4 text-sm text-white">
-                  <span className="mr-2" aria-hidden>
+              <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto_auto]">
+                <div className="relative">
+                  <span
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2"
+                    aria-hidden
+                  >
                     📍
                   </span>
-                  <span
-                    className={locationName ? 'text-white' : 'text-slate-500'}
-                  >
-                    {locationName !== null && locationName !== ''
-                      ? locationName
-                      : 'Not set'}
-                  </span>
+                  <input
+                    id="location"
+                    value={locationDraft}
+                    onChange={(event) => setLocationDraft(event.target.value)}
+                    placeholder="Type a city, neighborhood, or campus area"
+                    maxLength={120}
+                    className="h-12 w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-11 pr-4 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-purple-500"
+                  />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void saveProfile({
+                      typedLocation:
+                        locationDraft.trim().length === 0
+                          ? null
+                          : locationDraft,
+                    });
+                  }}
+                  disabled={saving}
+                  className="flex h-12 items-center justify-center rounded-xl bg-purple-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save location
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -604,7 +633,7 @@ export default function ProfilePage() {
 
                     navigator.geolocation.getCurrentPosition(
                       (position) => {
-                        void saveProfile(position.coords);
+                        void saveProfile({ geoLocation: position.coords });
                       },
                       (e: GeolocationPositionError) => {
                         setError(
@@ -618,9 +647,13 @@ export default function ProfilePage() {
                   disabled={saving}
                   className="flex h-12 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Update location
+                  Use device location
                 </button>
               </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Type a location manually or use your device location. Stored
+                coordinates are coarsened for privacy.
+              </p>
             </div>
 
             <p className="text-xs text-slate-500">Signed in as {signedInAs}</p>
